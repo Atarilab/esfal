@@ -1,11 +1,9 @@
 import numpy as np
-import mujoco
-import pinocchio
 
-from motions.cyclic.go2_trot import trot
-from motions.cyclic.go2_jump import jump
-from motions.cyclic.go2_bound import bound
 from mpc_controller.bicon_mpc import BiConMPC
+from mpc_controller.motions.cyclic.go2_trot import trot
+from mpc_controller.motions.cyclic.go2_jump import jump
+from mpc_controller.motions.cyclic.go2_bound import bound
 
 from mj_pin_wrapper.sim_env.utils import RobotModelLoader
 from mj_pin_wrapper.abstract.robot import QuadrupedWrapperAbstract
