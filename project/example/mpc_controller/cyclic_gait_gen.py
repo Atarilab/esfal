@@ -60,7 +60,7 @@ class CyclicQuadrupedGaitGen:
         self.offsets = np.round(
             ((robot.get_pin_thigh_position_world() - com_init) @ R),
             3)
-
+        
         # --- Set up Dynamics ---
         self.mass = pin.computeTotalMass(self.rmodel)
 
