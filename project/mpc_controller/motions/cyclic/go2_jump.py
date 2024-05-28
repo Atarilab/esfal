@@ -3,7 +3,7 @@
 ## Date : 7/7/21
 
 import numpy as np
-from motions.weight_abstract import BiconvexMotionParams
+from mpc_controller.motions.weight_abstract import BiconvexMotionParams
 
 N_JOINTS = 12
 
@@ -15,7 +15,7 @@ jump = BiconvexMotionParams("go2", "Jump")
 #########
 
 # Gait horizon
-jump.gait_horizon = 1.4
+jump.gait_horizon = 1.
 
 # Gait period (s)
 jump.gait_period = 0.5
@@ -26,9 +26,9 @@ jump.gait_dt = 0.05
 # Gait offset between legs [0,1] [FR, FL, RR, RL]
 jump.phase_offset = [0., 0., 0., 0.]
 # Gait step height
-jump.step_ht = 0.075
+jump.step_ht = 0.085
 # Gait mean/nominal height
-jump.nom_ht = 0.43
+jump.nom_ht = 0.45
 
 # Gains toque controller
 jump.kp = 20.

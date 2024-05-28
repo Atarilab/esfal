@@ -16,7 +16,7 @@ class Go2Config:
     mesh_dir = "assets"
     rotor_inertia = 0.5*0.250*(0.09/2)**2
     gear_ratio = 6.33
-    foot_size = 0.01
+    foot_size = 0.02
 
 if __name__ == "__main__":
     
@@ -28,16 +28,38 @@ if __name__ == "__main__":
     package_dir = RobotModelLoader.get_paths(cfg.name, mesh_dir=cfg.mesh_dir)
     
     ### Stepping stones env
+    stepping_stones_height = 0.1
     stepping_stones = SteppingStonesEnv(
-        grid_size=(9, 9),
-        spacing=(0.21, 0.14),
-        size_ratio=(0.35, 0.55),
-        height=0.01,
-        randomize_pos_ratio=0.5,
-        randomize_size_ratio=[0.4, 0.6]
+        grid_size=(10, 3),
+        spacing=(0.15, 0.14),
+        size_ratio=(0.75, 0.85),
+        height=stepping_stones_height,
+        randomize_pos_ratio=0.,
+        randomize_size_ratio=[0.5, 0.6]
     )
-    xml_string = stepping_stones.include_env(xml_string)
+
+    id_contacts_0 = np.array([26, 6, 24, 4])
+    pos_contacts_0 = stepping_stones.positions[id_contacts_0]
+
+    id_contacts_plan = np.array([
+        [26, 6, 24, 4],
+        [26, 6, 24, 4],
+        [27, 7, 24, 4],
+        [27, 7, 24, 4],
+        [27, 7, 25, 5],
+        [28, 8, 25, 5],
+        [28, 8, 25, 5],
+        [28, 8, 26, 6],
+        [28, 8, 26, 6],
+        [28, 8, 26, 6],
+        [28, 8, 26, 6],
+        [28, 8, 26, 6],
+        ])
+    pos_contact_plan = stepping_stones.positions[id_contacts_plan]
     
+    start_feet = stepping_stones.set_start_position(pos_contacts_0)
+    xml_string = stepping_stones.include_env(xml_string)
+        
     ### Load robot
     robot = QuadrupedWrapperAbstract(
         URDF_path,
@@ -50,15 +72,18 @@ if __name__ == "__main__":
     q0, _ = robot.get_mj_state()
     q0[2] += stepping_stones.height + 0.02
     robot.reset(q0)
-
+    
     ### Controller
-    controller = BiConMPC(robot, replanning_time=0.05, sim_opt_lag=False)
+    controller = BiConMPC(robot, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
     
     v_des = np.array([0.0, 0.0, 0.0])
     w_des = 0.0
 
     controller.set_command(v_des, w_des)
-    controller.set_gait_params(trot)  # Choose between trot, jump and bound
+    controller.set_gait_params(jump)  # Choose between trot, jump and bound
+    N_JUMPS = 100
+    #contact_plan = np.repeat(pos_contacts_0[np.newaxis, :, :], N_JUMPS, axis=0)
+    controller.set_contact_plan(contact_plan_des=pos_contact_plan)
 
     ### Simulator
     simulator = Simulator(robot, controller)
@@ -67,7 +92,7 @@ if __name__ == "__main__":
         desired_contact_locations_callback(viewer, step, q, v, data, controller)
         )
 
-    # Run 
+    # Run
     SIM_TIME = 10 #s
     simulator.run(
         simulation_time=SIM_TIME,

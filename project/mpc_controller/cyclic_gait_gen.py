@@ -11,7 +11,7 @@ from gait_planner_cpp import GaitPlanner
 from matplotlib import pyplot as plt
 
 from mj_pin_wrapper.abstract.robot import QuadrupedWrapperAbstract
-from motions.weight_abstract import BiconvexMotionParams
+from mpc_controller.motions.weight_abstract import BiconvexMotionParams
 
 class CyclicQuadrupedGaitGen:
     GRAVITY = 9.81
@@ -20,13 +20,16 @@ class CyclicQuadrupedGaitGen:
                  robot: QuadrupedWrapperAbstract,
                  gait_params: BiconvexMotionParams,
                  planning_time: float,
+                 height_offset: float,
                  ) -> None:
         """
-        Input:
+        Args:
             robot : robot model (pin and mujoco)
-            planning_time : planning frequency
+            planning_time : planning frequency (Hz)
+            height_offset : offset the height (m)
         """
         self.planning_time = planning_time
+        self.height_offset = height_offset
         self.sim_dt = robot.mj_model.opt.timestep
         # Robot pin model and data
         self.rmodel = robot.pin_model
@@ -215,7 +218,9 @@ class CyclicQuadrupedGaitGen:
 
                         if self.height_map != None:
                             self.cnt_plan[i][j][3] = self.height_map.getHeight(self.cnt_plan[i][j][1], self.cnt_plan[i][j][2])                        
-                    
+
+            self.cnt_plan[:, :, 2] += self.height_offset
+            
             if i == 0:
                 dt = self.params.gait_dt - np.round(np.remainder(t,self.params.gait_dt),2)
                 if dt == 0:
@@ -299,7 +304,7 @@ class CyclicQuadrupedGaitGen:
                             phase_percent = self.gait_planner.get_percent_in_phase(ft, j)
                             if phase_percent < 0.55:
                                 self.swing_time[i][j] = 1
-                                self.cnt_plan[i][j][-1] = self.params.step_ht
+                                self.cnt_plan[i][j][-1] += self.params.step_ht
                             
                 if i == 0:
                     dt = self.params.gait_dt - np.round(np.remainder(time,self.params.gait_dt),2)
@@ -355,7 +360,7 @@ class CyclicQuadrupedGaitGen:
             self.X_nom[9*i+0] = self.X_nom[9*(i-1)+0] + v_des[0]*self.dt_arr[i]
             self.X_nom[9*i+1] = self.X_nom[9*(i-1)+1] + v_des[1]*self.dt_arr[i]
 
-        self.X_nom[2::9] = self.params.nom_ht
+        self.X_nom[2::9] = self.params.nom_ht + self.height_offset
         self.X_nom[3::9] = v_des[0]
         self.X_nom[4::9] = v_des[1]
         self.X_nom[5::9] = v_des[2]
@@ -371,7 +376,7 @@ class CyclicQuadrupedGaitGen:
 
         #Set terminal references
         X_ter[0:2] = self.X_init[0:2] + (self.params.gait_horizon*self.params.gait_period*v_des)[0:2] #Changed this
-        X_ter[2] = self.params.nom_ht
+        X_ter[2] = self.params.nom_ht + self.height_offset
         X_ter[3:6] = v_des
         X_ter[6:] = amom
         #print("X_terminal: ", X_ter)

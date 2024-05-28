@@ -23,7 +23,7 @@ def desired_contact_locations_callback(viewer,
                                        robot_data: MjData,
                                        controller: ControllerAbstract) -> None:
     
-    if UPDATE_VISUALS_STEPS % UPDATE_VISUALS_STEPS == 0: 
+    if sim_step % UPDATE_VISUALS_STEPS == 0: 
         
         # Next contacts in base frame (except height in world frame)
         horizon_step = controller.gait_gen.horizon
@@ -56,3 +56,24 @@ def desired_contact_locations_callback(viewer,
                 rgba=color,
             )
         viewer.user_scn.ngeom = i + 1
+        
+        
+def position_3d_callback(viewer, positions_W: np.ndarray) -> None:
+    
+    viewer.user_scn.ngeom = 0
+    for i, pos in enumerate(positions_W):
+
+        # Add visuals
+        color = FEET_COLORS[i % len(FEET_COLORS)]
+        color[-1] = 0.4 if i > 4 else 1.
+        size = SPHERE_RADIUS if i < 4 else SPHERE_RADIUS / 2.
+        
+        mujoco.mjv_initGeom(
+            viewer.user_scn.geoms[i],
+            type=mujoco.mjtGeom.mjGEOM_SPHERE,
+            size=[size, 0, 0],
+            pos=pos,
+            mat=np.eye(3).flatten(),
+            rgba=color,
+        )
+    viewer.user_scn.ngeom = i + 1

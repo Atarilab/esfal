@@ -66,7 +66,7 @@ class SteppingStonesEnv:
 
         nodes_xy = np.dstack(np.meshgrid(ix, iy)).reshape(-1, 2)
         stepping_stones_xy = nodes_xy * np.array([self.spacing])
-        self.stepping_stones = np.hstack((stepping_stones_xy, z))
+        self.positions = np.hstack((stepping_stones_xy, z))
 
         
     def _init_size(self) -> None:
@@ -78,7 +78,7 @@ class SteppingStonesEnv:
             high=self.size_ratio[1],
             size=self.N
             )
-        self.size = size_ratio * max(self.spacing)
+        self.size = size_ratio * min(self.spacing)
         
     def _randomize_center_location(self) -> None:
         """
@@ -90,8 +90,8 @@ class SteppingStonesEnv:
         dx = np.random.rand(self.N) * max_displacement_x * self.randomize_pos_ratio
         dy = np.random.rand(self.N) * max_displacement_y * self.randomize_pos_ratio
 
-        self.stepping_stones[:, 0] += dx
-        self.stepping_stones[:, 1] += dy
+        self.positions[:, 0] += dx
+        self.positions[:, 1] += dy
         
     def remove_random(self, N_to_remove: int, keep: list[int] = []) -> None:
         """
@@ -118,15 +118,15 @@ class SteppingStonesEnv:
         assert self.shape in ["box", "cylinder"], "Stepping stone shape should be 'box' or 'cylinder'"
 
         if self.shape == "box":
-            size_x, size_y, size_z = self.size[id]/2., self.size[id]/2., self.stepping_stones[id, 2]/2.
+            size_x, size_y, size_z = self.size[id]/2., self.size[id]/2., self.positions[id, 2]/2.
             r, g, b, a = self.rgba
-            x, y, z = self.stepping_stones[id, 0], self.stepping_stones[id, 1], self.stepping_stones[id, 2]/2.
+            x, y, z = self.positions[id, 0], self.positions[id, 1], self.positions[id, 2]/2.
             string = f"""<geom type="box" name="box_{id}" size="{size_x:.3f} {size_y:.3f} {size_z:.3f}" pos="{x:.3f} {y:.3f} {z:.3f}" rgba="{r} {g} {b} {a}"/>"""
             
         elif self.shape == "cylinder":
-            size_radius, size_length = self.size[id]/2., self.stepping_stones[id, 2]/2.
+            size_radius, size_length = self.size[id]/2., self.positions[id, 2]/2.
             r, g, b, a = self.rgba
-            x, y, z = self.stepping_stones[id, 0], self.stepping_stones[id, 1], self.stepping_stones[id, 2]/2.
+            x, y, z = self.positions[id, 0], self.positions[id, 1], self.positions[id, 2]/2.
             string = f"""
             <geom type="cylinder" name="cylinder_{id}" size="{size_radius:.3f} {size_length:.3f}" pos="{x:.3f} {y:.3f} {z:.3f}" rgba="{r} {g} {b} {a}"/>"""
         string = "\t\t" + string + "\n"
@@ -244,19 +244,36 @@ class SteppingStonesEnv:
         Args:
             positions_xyz (np.ndarray): array of N 3D positions [N, 3].
         """
-        # Calculate squared distances between each point of positions_xyz
-        squared_distances = np.sum(
-            (self.stepping_stones[:, np.newaxis] - positions_xyz)**2,
-            axis=2)
+        
+        # Squared distance
+        diffs = self.positions[:, np.newaxis, :] - positions_xyz[np.newaxis, :, :]
+        d_squared = np.sum(diffs**2, axis=-1)
 
         # Find the indices of the closest points
-        closest_indices = np.argmin(squared_distances, axis=0)
+        closest_indices = np.argmin(d_squared, axis=0)
         
         # Extract the closest points from stepping stones
-        closest_points = self.stepping_stones[closest_indices]
+        closest_points = self.positions[closest_indices]
 
         return closest_indices, closest_points
-        
+    
+    def set_start_position(self, start_pos: np.array) -> np.ndarray:
+        """
+        Set closest x, y of stepping stones of the start positions
+        to x, y of start positions.
+
+        Args:
+            start_pos (np.array): Start positions. Shape [N, 3].
+        Returns:
+            np.ndarray: stepping stones closest to start positions.
+        """
+        start_pos[:, 2] = self.height
+        id_closest_to_start, _ = self.get_closest(start_pos)
+        self.positions[id_closest_to_start, :2] = start_pos[:, :2] 
+        self.size[id_closest_to_start] = 0.12
+        self.positions[id_closest_to_start, 2] = np.mean(self.positions[id_closest_to_start, 2])
+
+        return self.positions[id_closest_to_start]
     
 if __name__ == "__main__":
     ### TESTING
