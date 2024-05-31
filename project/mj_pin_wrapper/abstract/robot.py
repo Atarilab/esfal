@@ -27,7 +27,8 @@ class RobotWrapperAbstract(object):
     """
     
     # Constants
-    PIN_2_MJ_STATE_ID = [0,1,2,4,5,6,3] + list(range(7,19))
+    PIN_2_MJ_POS = [0,1,2,6,3,4,5]
+    MJ_2_PIN_POS = [0,1,2,4,5,6,3]
     MJ_FLOOR_NAME = "floor"
     # Default optionals
     DEFAULT_ROTOR_INERTIA = 0.
@@ -84,10 +85,6 @@ class RobotWrapperAbstract(object):
         self.pin_model = self.pin_robot.model
         self.pin_data = self.pin_robot.data
         self.set_pin_rotor_params(self.rotor_inertia, self.gear_ratio)
-        
-        q0, _ = self.get_pin_state()
-        pin.framesForwardKinematics(self.pin_model, self.pin_data, q0)
-        pin.updateFramePlacements(self.pin_model, self.pin_data)
         
         # Robot model parameters from MuJoCo model
         # Number of joints
@@ -192,6 +189,38 @@ class RobotWrapperAbstract(object):
             ).name : self.mj_model.actuator(i).id
             for i in range(self.n_act)
         }
+        
+        # Get all static geometries
+        self.static_geoms_id = self._get_all_static_geoms_id()
+        
+        # Set pin to mj state indices
+        self.pin2mjstate_id = RobotWrapperAbstract.PIN_2_MJ_POS + list(range(7, 7 + len(self.pin_joint_names)))
+        self.mj2pinstate_id = RobotWrapperAbstract.MJ_2_PIN_POS + list(range(7, 7 + len(self.pin_joint_names)))
+        
+        self.q0, _ = self.get_pin_state()
+        pin.framesForwardKinematics(self.pin_model, self.pin_data, self.q0)
+        pin.updateFramePlacements(self.pin_model, self.pin_data)
+        
+    def _get_all_static_geoms_id(self) -> list[int]:
+        """
+        Returns the id of all static geometries of the model.
+        Usefull for collision detection.
+
+        Returns:
+            list[int]: List of all static geometries indices.
+        """
+        # List to store the IDs of static geometries
+        static_geoms = []
+
+        # Loop through all geometries in the model
+        for geom_id in range(self.mj_model.ngeom):
+            # Check if the geometry's body ID is 0 (world body)
+            if self.mj_model.geom_bodyid[geom_id] == 0:
+                # Get the name of the geometry (if it has one)
+                geom_name = mujoco.mj_id2name(self.mj_model, mujoco.mjtObj.mjOBJ_GEOM, geom_id)
+                static_geoms.append(geom_id)
+                
+        return static_geoms
     
     def _get_mj_eeffectors_body(self) ->  list[str]:
         """
@@ -252,7 +281,7 @@ class RobotWrapperAbstract(object):
         """
         q_mj = np.take(
             self.mj_data.qpos,
-            RobotWrapperAbstract.PIN_2_MJ_STATE_ID,
+            self.mj2pinstate_id,
             mode="clip",
             )
         v_mj = self.mj_data.qvel
@@ -295,26 +324,20 @@ class RobotWrapperAbstract(object):
         Returns:
             eeff_in_contact_floor (dict): dict {eeff name : contact (as a bool)}
         """
-        # True if one of the end effector geometries is in contact with
-        # the floor
-        is_contact_eeff_floor = lambda contact : (
-            contact.geom[0] == self.mj_id_floor and
-            contact.geom[1] in self.mj_geom_eeff_id
-            )
-        
-        # Map geometry name from contact
-        geom_name_from_contact = lambda contact : (
-            self.mj_model.geom(contact.geom[1]).name
-        )
-        
+
         eeff_in_contact_floor = dict.fromkeys(self.mj_geom_eeff_names, False)
 
         # Filter contacts
-        for geom_contact_name in map(
-                geom_name_from_contact,
-                filter(is_contact_eeff_floor, self.mj_data.contact)
-                ):
-            eeff_in_contact_floor[geom_contact_name] = True
+        for cnt in self.mj_data.contact:
+            if (cnt.geom[0] in self.static_geoms_id and
+                cnt.geom[1] in self.mj_geom_eeff_id):
+                eeff_name = self.mj_model.geom(cnt.geom[0]).name
+                eeff_in_contact_floor[eeff_name] = True
+                
+            elif (cnt.geom[1] in self.static_geoms_id and
+                cnt.geom[0] in self.mj_geom_eeff_id):
+                eeff_name = self.mj_model.geom(cnt.geom[0]).name
+                eeff_in_contact_floor[eeff_name] = True
            
         return eeff_in_contact_floor
     
@@ -361,7 +384,40 @@ class RobotWrapperAbstract(object):
         q0, _ = self.get_pin_state()
         pin.framesForwardKinematics(self.pin_model, self.pin_data, q0)
         pin.updateFramePlacements(self.pin_model, self.pin_data)
-           
+        
+    def pin2mj_state(self, q_pin: np.ndarray) -> np.ndarray:
+        """
+        Convert Pinocchio to MuJoCo state format.
+
+        Args:
+            q (np.ndarray): State in pin format.
+
+        Returns:
+            np.ndarray: State in mj format.
+        """
+        q_mj = np.take(
+            q_pin,
+            self.mj2pinstate_id,
+            mode="clip",
+            )
+        return q_mj
+        
+    def mj2pin_state(self, q_mj: np.ndarray) -> np.ndarray:
+        """
+        Convert MuJoCo to Pinocchio state format.
+
+        Args:
+            q_mj (np.ndarray): State in mj format.
+
+        Returns:
+            np.ndarray: State in pin format.
+        """
+        q_pin = np.take(
+            q_mj,
+            self.pin2mjstate_id,
+            mode="clip",
+            )
+        return q_pin
 
 ######################################################################
 #####
@@ -726,7 +782,6 @@ class QuadrupedWrapperAbstract(RobotWrapperAbstract):
         if exclude_end_effectors:
             eeff_contact = self.get_mj_eeff_contact_with_floor()
             n_eeff_contact = sum([int(contact) for contact in eeff_contact.values()])
-            
             n_contact = len(self.mj_data.contact)
             
         if n_eeff_contact != n_contact:

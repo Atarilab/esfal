@@ -43,7 +43,7 @@ class RobotModelLoader:
             
         # Or try load from official git repo
         if (self.path_mjcf == "" or
-            self.path_urdf == []
+            self.path_urdf == ""
             ):
             self.path_urdf,\
             self.path_mjcf,\
