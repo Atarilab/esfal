@@ -4,6 +4,7 @@ from typing import Tuple
 
 class SteppingStonesEnv:
     CACHE_DIR = "cache"
+    DEFAULT_GEOM_NAME = "stone"
     DEFAULT_XLM_FILE = "stepping_stones.xml"
     DEFAULT_STONE_SHAPE = "box"               # box or cylinder
     DEFAULT_STONE_HEIGHT = 0.1                # m
@@ -116,19 +117,20 @@ class SteppingStonesEnv:
             id (int): id of the stepping stone.
         """
         assert self.shape in ["box", "cylinder"], "Stepping stone shape should be 'box' or 'cylinder'"
-
+        name = SteppingStonesEnv.DEFAULT_GEOM_NAME
+        
         if self.shape == "box":
             size_x, size_y, size_z = self.size[id]/2., self.size[id]/2., self.positions[id, 2]/2.
             r, g, b, a = self.rgba
             x, y, z = self.positions[id, 0], self.positions[id, 1], self.positions[id, 2]/2.
-            string = f"""<geom type="box" name="box_{id}" size="{size_x:.3f} {size_y:.3f} {size_z:.3f}" pos="{x:.3f} {y:.3f} {z:.3f}" rgba="{r} {g} {b} {a}"/>"""
+            string = f"""<geom type="box" name="{name}_{id}" size="{size_x:.3f} {size_y:.3f} {size_z:.3f}" pos="{x:.3f} {y:.3f} {z:.3f}" rgba="{r} {g} {b} {a}"/>"""
             
         elif self.shape == "cylinder":
             size_radius, size_length = self.size[id]/2., self.positions[id, 2]/2.
             r, g, b, a = self.rgba
             x, y, z = self.positions[id, 0], self.positions[id, 1], self.positions[id, 2]/2.
             string = f"""
-            <geom type="cylinder" name="cylinder_{id}" size="{size_radius:.3f} {size_length:.3f}" pos="{x:.3f} {y:.3f} {z:.3f}" rgba="{r} {g} {b} {a}"/>"""
+            <geom type="cylinder" name="{name}_{id}" size="{size_radius:.3f} {size_length:.3f}" pos="{x:.3f} {y:.3f} {z:.3f}" rgba="{r} {g} {b} {a}"/>"""
         string = "\t\t" + string + "\n"
         return string
         
