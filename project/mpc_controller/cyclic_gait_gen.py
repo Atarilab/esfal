@@ -239,7 +239,7 @@ class CyclicQuadrupedGaitGen:
         Args:
             q (array): current position state of the robot
             time (float): time (s)
-            cnt_plan_des_world (list): desired contact location
+            cnt_plan_des_world (list): desired contact location. Shape [L, 4, 3].
         """
         # This array determines when the swing foot cost should be enforced in the ik
         self.swing_time = np.zeros((self.horizon, self.n_eeff))
@@ -261,14 +261,14 @@ class CyclicQuadrupedGaitGen:
         
         b_T_W = w_T_b.inverse()
         
-
         # If custom contact plan is given
         if len(cnt_plan_des_world) >= self.horizon:
             for i in range(self.horizon):
                 for j in range(self.n_eeff):
                     b_pos_contact = b_T_W * cnt_plan_des_world[i][j]
                     b_pos_contact[-1] = cnt_plan_des_world[i][j][-1] + self.foot_size
-             
+                    b_pos_next_contact = b_T_W * cnt_plan_des_world[self.horizon // 2][j]
+
                     # First time step
                     if i == 0:
                         # Contact
@@ -302,9 +302,10 @@ class CyclicQuadrupedGaitGen:
                             self.cnt_plan[i][j][1:4] = b_pos_contact
                             
                             phase_percent = self.gait_planner.get_percent_in_phase(ft, j)
-                            if phase_percent < 0.55:
+                            if phase_percent <= 0.5:
                                 self.swing_time[i][j] = 1
-                                self.cnt_plan[i][j][-1] += self.params.step_ht
+                                self.cnt_plan[i][j][1:3] += (b_pos_next_contact - b_pos_contact)[:2] * 2 * phase_percent
+                                self.cnt_plan[i][j][-1] += self.params.step_ht * (1 - (0.75 - phase_percent)**2)
                             
                 if i == 0:
                     dt = self.params.gait_dt - np.round(np.remainder(time,self.params.gait_dt),2)

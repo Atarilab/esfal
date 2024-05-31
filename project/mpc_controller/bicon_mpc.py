@@ -116,7 +116,6 @@ class BiConMPC(ControllerAbstract):
         self.gait_horizon = self.gait_gen.horizon
         self.gait_period = self.gait_gen.params.gait_period
 
-
     def _step(self) -> None:
         self.pln_ctr = int((self.pln_ctr + 1)%(self.horizon))
         self.index += 1
@@ -134,14 +133,23 @@ class BiConMPC(ControllerAbstract):
         
         mpc_contacts = []
         if len(self.contact_plan_des) > 0:
+            
+            # Stay on the last contact location if end of contact plqn is reached
+            if self.replanning + 2 * self.gait_horizon > len(self.full_length_contact_plan):
+                self.full_length_contact_plan = np.concatenate(
+                    (self.full_length_contact_plan, np.repeat(self.full_length_contact_plan[-1, np.newaxis, :, :], int(2 * self.gait_horizon), axis=0)),
+                    axis=0
+                )
+                
             # Take the next horizon contact locations
             mpc_contacts = self.full_length_contact_plan[self.replanning:self.replanning + 2 * self.gait_horizon]
+            
             # Update the desired velocity
             i = int(self.gait_horizon * 3 / 2)
             avg_position_next_cnt = np.mean(mpc_contacts[i], axis=0)
-            self.v_des = np.round((avg_position_next_cnt - base_pos_w) / self.gait_period, 2)
+            self.v_des = np.round((avg_position_next_cnt - base_pos_w) / (self.gait_period * 2.), 2)
             self.v_des[-1] = 0.
-            self.v_des *= 1.2
+
         self.replanning += 1
         return mpc_contacts
             
