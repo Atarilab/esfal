@@ -60,6 +60,9 @@ class QuadrupedKinematicFeasibility():
         self.geom_data = pinocchio.GeometryData(self.geom_model)
         
         self.configuration = []
+            
+        feet_pin_frame_name = robot.pin_feet_frame_name       
+        self.frame_ids_feet = [self.robot.pin_model.getFrameId(frame_name) for frame_name in feet_pin_frame_name]
     
     def _compute_reachability(self) -> float:
         """
@@ -138,7 +141,7 @@ class QuadrupedKinematicFeasibility():
             np.ndarray: Index of the reachable foot positions. Shape [Nr]
         """
         # Compute distance to center of the feet
-        feet_pos_centered = foot_pos - current_location[np.newaxis, :]        # [N, 3]                   # [N, 4, 3]
+        feet_pos_centered = foot_pos - current_location[np.newaxis, :]        # [N, 3]
         distance_center_to_feet = np.linalg.norm(feet_pos_centered, axis=-1)  # [N, 1]
         
         # True if a foot if reachable
@@ -208,6 +211,7 @@ class QuadrupedKinematicFeasibility():
         pin_data,
         q0: np.ndarray,
         desired_feet_pos: np.ndarray,
+        frame_ids_feet: List[int]
         ) -> np.ndarray:
         """
         Perform closed-loop inverse kinematics (CLIK)
@@ -285,7 +289,8 @@ class QuadrupedKinematicFeasibility():
                     (self.robot.pin_model,
                     self.robot.pin_data,
                     self.q0,
-                    feet_pos)
+                    feet_pos,
+                    self.frame_ids_feet)
                     for feet_pos in desired_feet_pos
                 ]
             )

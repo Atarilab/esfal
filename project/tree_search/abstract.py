@@ -126,9 +126,8 @@ def timing(method_name):
     return decorator
 
 class MCTS():
+    PRINT_INFO_STEP = 1
     def __init__(self,
-                 reward_fn,
-                 get_children_fn,
                  simulation_steps:int=10,
                  C:float=np.sqrt(2),
                  **kwargs) -> None:
@@ -136,31 +135,27 @@ class MCTS():
         MCTS algorithm.
         
         Args:
-            - reward_fn                 : state, goal state -> reward (float)
-            - get_children_fn           : state -> possible next states (List)
             - simulation_steps (int)    : Number of simulation steps
             - C (float)                 : Exploration vs Exploitation coefficient in UCB
             - max_depth_selection       : Stop selection phase after <max_depth_selection> steps (to avoid infinite loop)
-            - max_solution_per_search   : Stop search when <max_solution_per_search> have been found
+            - max_solution_search       : Stop search when <max_solution_search> have been found
             - print_info (bool)         : Print current number of nodes in tree and reward
         """
         
-        self.reward = lambda state, goal : self.sigma(reward_fn(state, goal))
-        self.get_children = get_children_fn
         self.simulation_steps = simulation_steps
         self.C = C
 
         self.tree = Tree()
         self.solution_found = 0
 
-        self.optional_args = {
+        optional_args = {
             "max_depth_selection" : 10,
-            "max_solution_per_search" : 10,
+            "max_solution_search" : 10,
             "print_info" : False,
         }
 
-        self.optional_args.update(kwargs)
-        for k, v in self.optional_args.items(): setattr(self, k, v)
+        optional_args.update(kwargs)
+        for k, v in optional_args.items(): setattr(self, k, v)
         
         self.timings = {
             "selection": 0,
@@ -172,8 +167,29 @@ class MCTS():
     def is_terminal(self, start_state, state_goal) -> bool:
         return start_state == state_goal
     
+    def get_children(self, state):
+        """
+        Returns the children of a state.
+        To override.
+        """
+        return [state]
+    
+    def heuristic(self, states, state_goal):
+        """
+        Default heuristic. Select a node randomly from a set of states.
+        To override.
+        """
+        return np.random.choice(states)
+    
+    def reward(self, state, state_goal):
+        """
+        Default reward. Computes the reward associated to the current state.
+        To override.
+        """
+        return np.random.rand()
+    
     @timing("selection")
-    def selection(self, state):
+    def selection(self, state, state_goal):
         self.tree.current_search_path = []
 
         depth = 0
@@ -188,7 +204,7 @@ class MCTS():
             children = self.tree.get_children(state)
             unexplored = list(filter(lambda state: not self.tree.has_children(state), children))
             if unexplored:
-                state = unexplored.pop()
+                state = self.heuristic(unexplored, state_goal)
                 self.tree.current_search_path.append(state)
                 break
 
@@ -214,7 +230,7 @@ class MCTS():
             # Choose successively one child until goal is reached
             if self.tree.has_children(state) and not self.is_terminal(state, goal_state):
                 children = self.tree.get_children(state)
-                state = np.random.choice(children)
+                state = self.heuristic(children, goal_state)
             else:
                 break
 
@@ -240,7 +256,7 @@ class MCTS():
 
         for it in progress_bar:
             # Selection
-            leaf = self.selection(state_start)
+            leaf = self.selection(state_start, state_goal)
             # Expansion
             self.expansion(leaf)
             # Simulation
@@ -248,15 +264,18 @@ class MCTS():
             # Backpropagation
             self.back_propagation(reward)
 
-            if self.print_info and it % 10 == 0:
-                progress_bar.set_postfix({
-                        "nodes": len(self.tree.nodes),
-                        "reward": reward})
-
             if terminal_state:
                 self.solution_found += 1
-                if self.solution_found >= self.max_solution_search:
-                    break
+
+            if self.print_info and it % MCTS.PRINT_INFO_STEP == 0:
+                progress_bar.set_postfix({
+                        "found": self.solution_found,
+                        "nodes": len(self.tree.nodes),
+                        "reward": reward})
+                
+            if self.solution_found >= self.max_solution_search:
+                break
+                
 
     def get_best_children(self, state_start, state_goal, n_children:int=1, mode:str="visit") -> List:
     

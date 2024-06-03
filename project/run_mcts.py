@@ -8,9 +8,12 @@ from mpc_controller.motions.cyclic.go2_bound import bound
 from mj_pin_wrapper.sim_env.utils import RobotModelLoader
 from mj_pin_wrapper.abstract.robot import QuadrupedWrapperAbstract
 from mj_pin_wrapper.simulator import Simulator
+
 from environment.stepping_stones import SteppingStonesEnv
 from environment.sim import SteppingStonesSimulator
+
 from utils.visuals import desired_contact_locations_callback
+from tree_search.mcts import MCTSSteppingStones
 
 class Go2Config:
     name = "go2"
@@ -39,21 +42,6 @@ if __name__ == "__main__":
         randomize_size_ratio=[0.5, 0.6]
     )
 
-    id_contacts_plan = np.array([
-        [26, 6, 24, 4],
-        [26, 6, 24, 4],
-        [27, 7, 24, 4],
-        [27, 7, 24, 4],
-        [27, 7, 25, 5],
-        [28, 8, 25, 5],
-        [28, 8, 25, 5],
-        [28, 8, 26, 6],
-        [28, 8, 26, 6],
-        [28, 8, 26, 6],
-        [28, 8, 26, 6],
-        [28, 8, 26, 6],
-        ])
-
     xml_string = stepping_stones.include_env(xml_string)
         
     ### Load robot
@@ -77,12 +65,19 @@ if __name__ == "__main__":
         desired_contact_locations_callback(viewer, step, q, v, data, controller)
         )
 
-    # Run
-    goal_reached = simulator.run_contact_plan(
-        id_contacts_plan,
-        use_viewer=True,
-        visual_callback_fn=visual_callback
-        )
+    ### MCTS
+    mcts = MCTSSteppingStones(
+        simulator,
+        simulation_steps=3,
+        alpha_exploration=0.1,
+        C=10.,
+        W=5,
+        max_solution_search=3.,
+        print_info=True
+    )
+    start = [26, 6, 24, 4]
+    goal = [28, 8, 26, 6]
     
-    if goal_reached: print("Goal reached.")
-    else: print("Failed")
+    mcts.search(
+        start, goal
+    )

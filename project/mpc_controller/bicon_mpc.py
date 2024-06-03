@@ -66,7 +66,24 @@ class BiConMPC(ControllerAbstract):
         self.f_plan = np.empty((3*self.horizon, self.robot.n_eeff*3), dtype=np.float32)
         
         self.set_command()
-                
+        
+    def reset(self):
+        """
+        Reset controller.
+        """
+        self.contact_plan_des = []
+        self.full_length_contact_plan = []
+        self.replanning = 0 # Replan contacts
+
+        # MPC timings parameters
+        self.sim_t = 0.0
+        self.index = 0
+        self.step = 0
+        self.pln_ctr = 0
+        self.horizon = int(self.replanning_time / self.sim_dt) # s
+       
+        self.set_command()
+        
     def set_command(self,
                     v_des: np.ndarray = np.zeros((3,)),
                     w_des: float = 0.,
@@ -96,6 +113,7 @@ class BiConMPC(ControllerAbstract):
             - timings_between_switch (float): Duration between two set of contacts in s.
         """
         assert self.gait_horizon > 0, "Set the gait parameters first."
+        self.reset()
         # TODO: Implement timings_between_switch
         self.contact_plan_des = contact_plan_des
         # Expend the contact plan, shape [H // 2 * L, 4, 3]
@@ -134,20 +152,24 @@ class BiConMPC(ControllerAbstract):
         mpc_contacts = []
         if len(self.contact_plan_des) > 0:
             
-            # Stay on the last contact location if end of contact plqn is reached
+            # Stay on the last contact location if end of contact plan is reached
             if self.replanning + 2 * self.gait_horizon > len(self.full_length_contact_plan):
                 self.full_length_contact_plan = np.concatenate(
-                    (self.full_length_contact_plan, np.repeat(self.full_length_contact_plan[-1, np.newaxis, :, :], int(2 * self.gait_horizon), axis=0)),
+                        (
+                        self.full_length_contact_plan,
+                        np.repeat(self.full_length_contact_plan[-1, np.newaxis, :, :], 2 * self.gait_horizon,
+                        axis=0
+                        )),
                     axis=0
                 )
-                
+
             # Take the next horizon contact locations
             mpc_contacts = self.full_length_contact_plan[self.replanning:self.replanning + 2 * self.gait_horizon]
-            
             # Update the desired velocity
-            i = int(self.gait_horizon * 3 / 2)
+            i = (self.gait_horizon - 1) *  2
             avg_position_next_cnt = np.mean(mpc_contacts[i], axis=0)
-            self.v_des = np.round((avg_position_next_cnt - base_pos_w) / (self.gait_period * 2.), 2)
+            self.v_des = np.round((avg_position_next_cnt - base_pos_w) / self.gait_period, 2)
+            self.v_des *= 1.25
             self.v_des[-1] = 0.
 
         self.replanning += 1
