@@ -1,9 +1,11 @@
 import numpy as np
 import tqdm
 import time
-from typing import List
+from typing import List, Tuple
 from collections import defaultdict
 from functools import wraps
+
+State = List[int]
 
 class Action:
     def __init__(self) -> None:
@@ -31,30 +33,30 @@ class Tree:
         self.current_search_path = []               # Path of the current search List[state]
 
     @staticmethod
-    def hash_state(state:List[int]) -> str:
+    def hash_state(state : State) -> str:
         hash_string = '-'.join(map(str, state))
         return hash_string
     
     @staticmethod
-    def unhash_state(h_state:str) -> List[int]:
+    def unhash_state(h_state:str) -> State:
         state = list(map(int, h_state.split('-')))
         return state
     
-    def add_node(self, state:List[int]):
+    def add_node(self, state : State):
         h = self.hash_state(state)
         if not h in self.nodes.keys():
             self.nodes[h] = Node()
 
-    def has_children(self, state:List[int]) -> bool:
+    def has_children(self, state : State) -> bool:
         h = self.hash_state(state)
         return bool(self.nodes[h].actions)
     
-    def get_children(self, state:List[int]) -> List[List[int]]:
+    def get_children(self, state : State) -> List[State]:
         h = self.hash_state(state)
         node = self.nodes[h]
         return list(map(self.unhash_state, node.actions.keys()))
 
-    def add_children_to_node(self, state:List[int], children_states:List[List[int]]) -> None:
+    def add_children_to_node(self, state : State, children_states : List[State]) -> None:
         h = self.hash_state(state)
         node = self.nodes[h] # Create node if not exists
         if not node.actions:
@@ -65,7 +67,7 @@ class Tree:
             # Add actions and children to current state 
             node.actions = {h_child : Action() for h_child in h_children}
 
-    def update_value_visit_action(self, stateA:List[int], stateB:List[int], reward:float) -> None:
+    def update_value_visit_action(self, stateA : State, stateB : State, reward : float) -> None:
         hA = self.hash_state(stateA)
         hB = self.hash_state(stateB)
 
@@ -79,7 +81,7 @@ class Tree:
     def reset_search_path(self) -> None:
         self.current_search_path = []
     
-    def get_action(self, stateA:List[int], stateB:List[int]) -> Action:
+    def get_action(self, stateA : State, stateB : State) -> Action:
         hA = self.hash_state(stateA)
 
         if hA in self.nodes.keys():
@@ -88,20 +90,20 @@ class Tree:
                 return self.nodes[hA].actions[hB]
         return None
     
-    def get_actions(self, state:List[int]) -> List[Action]:
+    def get_actions(self, state : State) -> List[Action]:
         h = self.hash_state(state)
 
         if h in self.nodes.keys():
             return list(self.nodes[h].actions.values())
         return None
     
-    def get_node(self, state:List[List[int]]) -> Node:
+    def get_node(self, state : State) -> Node:
         h = self.hash_state(state)
         if h in self.nodes.keys():
             return self.nodes[h]
         return None
     
-    def UCB(self, stateA:List[List[int]], stateB:List[List[int]], C = 3.0e-2) -> float:
+    def UCB(self, stateA : State, stateB : State, C = 3.0e-2) -> float:
         hA = self.hash_state(stateA)
         hB = self.hash_state(stateB)
 
@@ -120,7 +122,10 @@ def timing(method_name):
             start_time = time.time()
             result = func(self, *args, **kwargs)
             end_time = time.time()
-            self.timings[method_name] += (end_time - start_time)
+            N = self.it + 1
+            t = (end_time - start_time) * 1000 # ms
+            # Update average
+            self.timings[method_name] = 1 / N * ((N - 1) * self.timings[method_name] + t)
             return result
         return wrapper
     return decorator
@@ -146,7 +151,9 @@ class MCTS():
         self.C = C
 
         self.tree = Tree()
-        self.solution_found = 0
+        self.n_solution_found = 0
+        self.it = 0
+        self.solutions = []
 
         optional_args = {
             "max_depth_selection" : 10,
@@ -157,31 +164,26 @@ class MCTS():
         optional_args.update(kwargs)
         for k, v in optional_args.items(): setattr(self, k, v)
         
-        self.timings = {
-            "selection": 0,
-            "expansion": 0,
-            "simulation": 0,
-            "back_propagation": 0
-        }
+        self.timings = defaultdict(float)
 
-    def is_terminal(self, start_state, state_goal) -> bool:
+    def is_terminal(self, start_state : State, state_goal : State) -> bool:
         return start_state == state_goal
     
-    def get_children(self, state):
+    def get_children(self, state : State) -> List[State]:
         """
         Returns the children of a state.
         To override.
         """
         return [state]
     
-    def heuristic(self, states, state_goal):
+    def heuristic(self, states : List[State], state_goal : State) -> State:
         """
         Default heuristic. Select a node randomly from a set of states.
         To override.
         """
         return np.random.choice(states)
     
-    def reward(self, state, state_goal):
+    def reward(self, state : State, state_goal : State) -> float:
         """
         Default reward. Computes the reward associated to the current state.
         To override.
@@ -189,7 +191,7 @@ class MCTS():
         return np.random.rand()
     
     @timing("selection")
-    def selection(self, state, state_goal):
+    def selection(self, state : State, state_goal : State) -> State:
         self.tree.current_search_path = []
 
         depth = 0
@@ -216,32 +218,36 @@ class MCTS():
         return state
     
     @timing("expansion")
-    def expansion(self, state) -> None:
+    def expansion(self, state : State) -> None:
         # If has no children already
         if not self.tree.has_children(state):
             children_states = self.get_children(state)
             self.tree.add_children_to_node(state, children_states)
-        
+    
     @timing("simulation")
-    def simulation(self, state, goal_state) -> float:
+    def simulation(self, state : State, goal_state : State) -> Tuple[float, bool]:
         terminal_state = False
+        simulation_path = []
         for _ in range(self.simulation_steps):
 
             # Choose successively one child until goal is reached
             if self.tree.has_children(state) and not self.is_terminal(state, goal_state):
                 children = self.tree.get_children(state)
                 state = self.heuristic(children, goal_state)
+                simulation_path.append(state)
             else:
                 break
 
         if self.is_terminal(state, goal_state):
             terminal_state = True
+            full_path = self.tree.current_search_path + simulation_path
+            self.solutions.append(full_path)
 
         reward = self.reward(state, goal_state)
         return reward, terminal_state
     
     @timing("back_propagation")
-    def back_propagation(self, reward) -> None:
+    def back_propagation(self, reward : float) -> None:
         child_state = self.tree.current_search_path[-1]
         for state in reversed(self.tree.current_search_path[:-1]):
             self.tree.update_value_visit_action(state, child_state, reward)
@@ -250,11 +256,11 @@ class MCTS():
     def search(self, state_start, state_goal, num_iterations:int=1000):
         
         progress_bar = tqdm.trange(0, num_iterations)
-        self.solution_found = 0
+        self.n_solution_found = 0
 
         self.tree.reset_search_path()
 
-        for it in progress_bar:
+        for self.it in progress_bar:
             # Selection
             leaf = self.selection(state_start, state_goal)
             # Expansion
@@ -265,17 +271,16 @@ class MCTS():
             self.back_propagation(reward)
 
             if terminal_state:
-                self.solution_found += 1
+                self.n_solution_found += 1
 
-            if self.print_info and it % MCTS.PRINT_INFO_STEP == 0:
+            if self.print_info and self.it % MCTS.PRINT_INFO_STEP == 0:
                 progress_bar.set_postfix({
-                        "found": self.solution_found,
+                        "found": self.n_solution_found,
                         "nodes": len(self.tree.nodes),
                         "reward": reward})
                 
-            if self.solution_found >= self.max_solution_search:
+            if self.n_solution_found >= self.max_solution_search:
                 break
-                
 
     def get_best_children(self, state_start, state_goal, n_children:int=1, mode:str="visit") -> List:
     

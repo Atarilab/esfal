@@ -72,7 +72,7 @@ if __name__ == "__main__":
         alpha_exploration=0.1,
         C=10.,
         W=5,
-        max_solution_search=3.,
+        max_solution_search=2,
         print_info=True
     )
     start = [26, 6, 24, 4]
@@ -81,3 +81,5 @@ if __name__ == "__main__":
     mcts.search(
         start, goal
     )
+    
+    print(mcts.get_timings())
