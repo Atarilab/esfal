@@ -1,5 +1,5 @@
 # Base image
-FROM ubuntu:jammy
+FROM nvidia/cuda:12.2.0-base-ubuntu22.04
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -32,7 +32,8 @@ RUN apt-get update && \
     libxkbcommon-x11-dev \
     libglu1-mesa-dev \
     python3-tk \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    libglfw3-dev
 
 
 # Create a non-root user
@@ -67,6 +68,7 @@ RUN pip install pybind11[global]
 # Dependencies
 RUN python3 -m pip install --upgrade pip pytest matplotlib jupyter PyQt5
 RUN python3 -m pip install --upgrade robot_descriptions mujoco mujoco-mjx
+RUN python3 -m pip install --upgrade tyro torch 
 
 # Debug Dependencies
 RUN pip3 install memray memory-profiler Pympler
