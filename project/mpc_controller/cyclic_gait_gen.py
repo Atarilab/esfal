@@ -2,6 +2,7 @@
 ## Author : Avadesh Meduri & Paarth Shah
 ## Date : 6/05/2021
 
+import copy
 import time
 import numpy as np
 import pinocchio as pin
@@ -419,7 +420,7 @@ class CyclicQuadrupedGaitGen:
         
     def optimize(self, q, v, t, v_des, w_des, cnt_plan_des=[], X_wm = None, F_wm = None, P_wm = None):
 
-        q_origin = np.copy(q)
+        q_origin = copy.deepcopy(q)
         q_origin[:2] = 0.
         
         if w_des != 0:

@@ -54,6 +54,7 @@ class SteppingStonesEnv:
         
         self._init_center_location()  
         self._init_size()
+        self._randomize_height()
         self._randomize_center_location()
         
     def _init_center_location(self) -> None:
@@ -63,12 +64,16 @@ class SteppingStonesEnv:
         ix = np.arange(self.I) - self.I // 2
         iy = np.arange(self.J) - self.J // 2
         z = np.full(((self.N, 1)), self.height)
-        z += (np.random.rand(self.N, 1) - 0.5) * 2 * self.randomize_height_ratio * self.height
 
         nodes_xy = np.dstack(np.meshgrid(ix, iy)).reshape(-1, 2)
         stepping_stones_xy = nodes_xy * np.array([self.spacing])
         self.positions = np.hstack((stepping_stones_xy, z))
 
+    def _randomize_height(self) -> None:
+        """
+        Randomize the height of the stones.
+        """
+        self.positions[:, -1] += (np.random.rand(self.N) - 0.5) * 2 * self.randomize_height_ratio * self.height
         
     def _init_size(self) -> None:
         """
@@ -272,10 +277,47 @@ class SteppingStonesEnv:
         start_pos[:, 2] = self.height
         id_closest_to_start, _ = self.get_closest(start_pos)
         self.positions[id_closest_to_start, :2] = start_pos[:, :2] 
-        self.size[id_closest_to_start] = 0.12
+        self.size[id_closest_to_start] = max(self.size_ratio) * max(self.spacing)
         self.positions[id_closest_to_start, 2] = np.mean(self.positions[id_closest_to_start, 2])
 
         return self.positions[id_closest_to_start]
+    
+    def pick_random(self, positions_xyz: np.ndarray, d_max : float) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Pick random stepping stones around given positions at a maximum distance of d_max.
+
+        Args:
+            positions_xyz (np.ndarray): array of N 3D positions [N, 3].
+            d_max (float): maximum distance to consider for picking stones.
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray]: id [N], positions [N, 3]
+        """
+        # Squared distance
+        diffs = self.positions[:, np.newaxis, :] - positions_xyz[np.newaxis, :, :]
+        dist = np.sqrt(np.sum(diffs**2, axis=-1))
+
+        # Init
+        N = len(positions_xyz)
+        chosen_indices = np.zeros(N, dtype=np.int32)
+        chosen_positions = np.zeros_like(positions_xyz, dtype=np.float32)
+        
+        for i in range(N):
+            # Filter based on d_max
+            within_d_max = dist[:, i] <= d_max
+            # Get valid indices
+            valid_indices = np.where(within_d_max)
+            
+            if len(valid_indices[0]) == 0:
+                raise ValueError("No positions found within the specified distance.")
+
+            id = np.random.choice(valid_indices[0], replace=False)
+            pos = self.positions[id]
+            
+            chosen_indices[i] = id
+            chosen_positions[i] = pos
+
+        return chosen_indices, chosen_positions
     
 if __name__ == "__main__":
     ### TESTING

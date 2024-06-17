@@ -16,17 +16,18 @@ class SteppingStonesSimulator(Simulator):
     # selected set of 4 contact locataions 
     MAX_DIST_RANDOM_LOCATION = 0.07 # m
     # Height offset when initialising start position
-    HEIGHT_OFFSET_START = 0.03 # m
+    HEIGHT_OFFSET_START = 0.04 # m
     # Minimun number of steps the goal is reached consecutively
     MIN_GOAL_CONSECUTIVE = 6
     # Check if robot reached goal every <CHECK_GOAL_PERIOD> steps
-    CHECK_GOAL_PERIOD = 250
+    CHECK_GOAL_PERIOD = 150
     
     def __init__(self,
                  stepping_stones_env: SteppingStonesEnv,
                  robot: QuadrupedWrapperAbstract,
                  controller: BiConMPC,
-                 data_recorder: DataRecorderAbstract = None) -> None:
+                 data_recorder: DataRecorderAbstract = None,
+                 **kwargs) -> None:
         super().__init__(robot, controller, data_recorder)
         
         self.stepping_stones = stepping_stones_env
@@ -37,6 +38,13 @@ class SteppingStonesSimulator(Simulator):
         self.goal_pos = []
         self.goal_indices = []
         self.consec_on_goal = 0
+        
+        optionals = {
+            "min_goal_consecutive" : SteppingStonesSimulator.MIN_GOAL_CONSECUTIVE,            
+            "height_offset" : SteppingStonesSimulator.HEIGHT_OFFSET_START,            
+        }
+        optionals.update(kwargs)
+        for k, v in optionals.items(): setattr(self, k, v)
         
     def _sample_random_feet_stones_locations(self,
                                              max_dist_to_center: float = -1) -> list[int]:
@@ -87,9 +95,10 @@ class SteppingStonesSimulator(Simulator):
         return closest_stones_id
             
     def set_start_and_goal(self,
-                           start_indices: np.ndarray | list[int] | Any = None,
-                           goal_indices: np.ndarray | list[int] | Any = None,
-                           max_dist: float = 1.) -> None:
+                           start_indices: np.ndarray | list[int] | Any = [],
+                           goal_indices: np.ndarray | list[int] | Any = [],
+                           max_dist: float = 1.,
+                           init_robot_pos: bool = True) -> None:
         """
         Set the start and goal locations.
         If not provided, set them at random so that the start is at the center
@@ -116,13 +125,14 @@ class SteppingStonesSimulator(Simulator):
         self.goal_pos = self.stepping_stones.positions[self.goal_indices]
         
         # Set robot start state
-        q_start = self.q0.copy()
-        q_start[:2] = np.mean(self.start_pos, axis=0)[:2]
-        q_start[2] += self.stepping_stones.height + 0.04
-        self.robot.reset(q_start)
-        
-        # Move start positions under the feet
-        self.stepping_stones.set_start_position(self.start_pos)
+        if init_robot_pos:
+            q_start = self.q0.copy()
+            q_start[:2] = np.mean(self.start_pos, axis=0)[:2]
+            q_start[2] += self.stepping_stones.height + SteppingStonesSimulator.HEIGHT_OFFSET_START
+            self.robot.reset(q_start)
+
+            # Move start positions under the feet
+            self.stepping_stones.set_start_position(self.start_pos)
         
     def _on_goal(self) -> bool:
         """
@@ -171,7 +181,7 @@ class SteppingStonesSimulator(Simulator):
         
         if self.sim_step % SteppingStonesSimulator.CHECK_GOAL_PERIOD == 0:
             self._on_goal()
-            if self.consec_on_goal >= SteppingStonesSimulator.MIN_GOAL_CONSECUTIVE:
+            if self.consec_on_goal >= self.min_goal_consecutive:
                 self.stop_sim = True
         
     def run_contact_plan(self,
@@ -184,7 +194,7 @@ class SteppingStonesSimulator(Simulator):
         Run simulation and controller with a given contact plan.
 
         Args:
-            - contact_plan_id (np.ndarray): Indices of the contact locations. Shape [L, Neeff, 3].
+            - contact_plan_id (np.ndarray): Indices of the contact locations. Shape [L, Neeff, 1].
             - use_viewer (bool, optional): Use viewer. Defaults to False.
             - visual_callback_fn (fn): function that takes as input:
                 - the viewer
@@ -198,10 +208,11 @@ class SteppingStonesSimulator(Simulator):
             int: 1 if goal reached else 0.
         """
         verbose = kwargs.get("verbose", False)
+        init_robot_pos = kwargs.get("init_robot_pos", True)
         
-        if len(self.goal_indices) == 0 or len(self.start_indices) == 0:
-            self.set_start_and_goal(contact_plan_id[0], contact_plan_id[-1])
-
+        self.set_start_and_goal(contact_plan_id[0], contact_plan_id[-1], init_robot_pos=init_robot_pos)
+        self.consec_on_goal = 0
+        
         contact_plan_pos = self.stepping_stones.positions[contact_plan_id]
         self.controller.set_contact_plan(contact_plan_pos)
 

@@ -44,6 +44,8 @@ class BiConMPC(ControllerAbstract):
         self.contact_plan_des = []
         self.full_length_contact_plan = []
         self.replanning = 0 # Replan contacts
+        # True if MPC diverges
+        self.diverged = False
 
         # Inverse dynamics controller
         self.robot_id_ctrl = InverseDynamicsController(
@@ -81,7 +83,8 @@ class BiConMPC(ControllerAbstract):
         self.step = 0
         self.pln_ctr = 0
         self.horizon = int(self.replanning_time / self.sim_dt) # s
-       
+        self.diverged = False
+        
         self.set_command()
         
     def set_command(self,
@@ -116,7 +119,7 @@ class BiConMPC(ControllerAbstract):
         self.reset()
         # TODO: Implement timings_between_switch
         self.contact_plan_des = contact_plan_des
-        # Expend the contact plan, shape [H // 2 * L, 4, 3]
+        # Expend the contact plan, shape [H * L, 4, 3]
         self.full_length_contact_plan = np.repeat(contact_plan_des, self.gait_horizon, axis=0)
     
     def set_gait_params(self,
@@ -138,6 +141,12 @@ class BiConMPC(ControllerAbstract):
         self.pln_ctr = int((self.pln_ctr + 1)%(self.horizon))
         self.index += 1
         self.step += 1
+        
+    def _check_if_diverged(self, plan):
+        """
+        Check if plan contains nan values.
+        """
+        return np.isnan(plan).any()
         
     def get_desired_contacts(self, base_pos_w) -> np.ndarray:
         """
@@ -205,7 +214,11 @@ class BiConMPC(ControllerAbstract):
                 self.v_des,
                 self.w_des,
                 cnt_plan_des=self.get_desired_contacts(q[:3]))
-
+            
+            self.diverged = (self._check_if_diverged(self.xs_plan) or
+                             self._check_if_diverged(self.us_plan) or
+                             self._check_if_diverged(self.f_plan))
+            
             pr_et = time.time() - pr_st
         
         # Second loop onwards lag is taken into account
@@ -245,8 +258,3 @@ class BiConMPC(ControllerAbstract):
         self._step()
         
         return torque_command
-    
-    
-class BiConMPCContactPlan(BiConMPC):
-    def __init__(self, robot: RobotWrapperAbstract, **kwargs) -> None:
-        super().__init__(robot, **kwargs)

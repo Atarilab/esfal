@@ -26,13 +26,13 @@ jump.gait_dt = 0.05
 # Gait offset between legs [0,1] [FR, FL, RR, RL]
 jump.phase_offset = [0., 0., 0., 0.]
 # Gait step height
-jump.step_ht = 0.065
+jump.step_ht = 0.055
 # Gait mean/nominal height
-jump.nom_ht = 0.43
+jump.nom_ht = 0.35
 
 # Gains toque controller
-jump.kp = 20.5
-jump.kd = 0.85
+jump.kp = 17.
+jump.kd = 0.2
 
 # ADMM constraints violation norm
 jump.rho = 4e+4
@@ -44,17 +44,17 @@ jump.rho = 4e+4
 ### State
 jump.state_wt =  np.array(
     # position (x, y, z)
-    [20., 20., 1e3] +
+    [10., 10., 2e2] +
     # orientation (r, p, y)
-    [3e3, 3e3, 8e3] +
+    [5e3, 4e3, 1e3] +
     # joint positions                    
-    [200.0, 20., 80.]  * 4 +
+    [100., 25., 60.]  * 4 +
     # linear velocities (x, y, z)                 
-    [80., 80., 1e3] +
+    [10., 10., 2e2] +
     # angular velocities (x, y, z) 
-    [3e3, 3e3, 8e3] +
+    [9e3, 4e3, 1e3] +
     # joint velocities          
-    [5.0, 45., 35.]  * 4
+    [10., 35., 25.]  * 4
     )
 
 ### Control
@@ -87,7 +87,7 @@ jump.cent_wt = np.array(
 
 ### Regularization, scale state_wt and ctrl_wt
 jump.reg_wt = [
-    1.2e-1,
+    2.e-1,
     9.e-6
     ]
 
@@ -116,12 +116,12 @@ jump.W_X_ter = np.array(
     )
 
 ### Force on each end effectors
-jump.W_F = np.array(4*[3e+0, 3e+0, 2.5e+1])
+jump.W_F = np.array(4*[1e+0, 1e+0, 2.5e+1])
 
 # Maximum force to apply (will be multiplied by the robot weight)
-jump.f_max = np.array([.2, .2, 0.5])
+jump.f_max = np.array([.3, .2, .4])
 
 jump.dyn_bound = np.array(3 * [0.45])
 
 ### Orientation correction (weights) modifies angular momentum
-jump.ori_correction = [1.8, 1.8, 0.8]
+jump.ori_correction = [0.4, 1., 0.4]

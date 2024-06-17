@@ -1,0 +1,36 @@
+DATA: # arguments that will be passed to get_dataloaders
+  batch_size: 32
+  points_per_circle: 9
+  n_radius: 2
+  conditioned: "theta"
+
+MODEL:
+  model_name: ConditionalUnet1DBase
+  PARAMS: # arguments that will be passed to the chosen models
+    input_dim: 2
+    global_cond_dim: 9
+    diffusion_step_embed_dim: 32
+    down_dims: {16, 32, 64}
+    kernel_size: 3
+
+TRAINING: # arguments that will be passed to the trainer
+  criterion_str: MSELoss
+  optimizer:
+    optimizer_name: AdamW
+    PARAMS:
+      lr: 0.001
+  epochs: 50
+  logdir: "./logs/ConditionalUnet1D/"
+  use_logger: True
+  timesteps: 50
+  prediction_type: "sample"
+  beta_schedule: "cumulative"
+  lambda_snr_integral: 0.001
+  learn_snr: True
+  clip_sample: False
+
+# SWEEP: # arguments to sweep over and their values
+#   p_detach_snr_loss:
+#     min: 0.25
+#     max: 1.
+#     n: 4
