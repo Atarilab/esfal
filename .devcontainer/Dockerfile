@@ -68,7 +68,7 @@ RUN pip install pybind11[global]
 # Dependencies
 RUN python3 -m pip install --upgrade pip pytest matplotlib jupyter PyQt5
 RUN python3 -m pip install --upgrade robot_descriptions mujoco mujoco-mjx
-RUN python3 -m pip install --upgrade tyro torch 
+RUN python3 -m pip install --upgrade tyro torch diffusers tensorboard scikit-learn
 
 # Debug Dependencies
 RUN pip3 install memray memory-profiler Pympler
