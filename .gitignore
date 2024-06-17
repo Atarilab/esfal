@@ -1,4 +1,7 @@
 MUJOCO_LOG.TXT
+logs/
+data/learning_jump_feasibility
+data/learning_kinematics
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
