@@ -35,9 +35,20 @@ class QuadrupedKinematicFeasibility():
     """
     def __init__(self,
                  robot: QuadrupedWrapperAbstract,
-                 num_threads: int = -1) -> None:
+                 num_threads: int = -1,
+                 **kwargs) -> None:
         self.robot = robot
         self.robot.reset()
+        
+        # Optionals
+        optional_args = {
+            "eps" : QuadrupedKinematicFeasibility.EPS,
+            "it_max" : QuadrupedKinematicFeasibility.IT_MAX,
+            "dt" : QuadrupedKinematicFeasibility.DT
+        }
+        optional_args.update(kwargs)
+        for k, v in optional_args.items(): setattr(self, k, v)
+        
         # Get initial position
         self.q0, _ = self.robot.get_pin_state()
         
@@ -211,7 +222,10 @@ class QuadrupedKinematicFeasibility():
         pin_data,
         q0: np.ndarray,
         desired_feet_pos: np.ndarray,
-        frame_ids_feet: List[int]
+        frame_ids_feet: List[int],
+        dt: float = 0.3,
+        eps: float = 1.0e-2,
+        it_max: int = 150
         ) -> np.ndarray:
         """
         Perform closed-loop inverse kinematics (CLIK)
@@ -226,7 +240,7 @@ class QuadrupedKinematicFeasibility():
         
         success = False
         i = 0
-        dt = QuadrupedKinematicFeasibility.DT
+        dt_ = dt
         q = q0.copy()
         q[:3] = np.mean(desired_feet_pos, axis=0)
         q[2] += q0[2] + 0.1
@@ -236,7 +250,7 @@ class QuadrupedKinematicFeasibility():
         oMdes_feet = [pinocchio.SE3(np.eye(3), pos) for pos in desired_feet_pos]
 
         while True:
-            if i >= QuadrupedKinematicFeasibility.IT_MAX:
+            if i >= it_max:
                 success = False
                 break
 
@@ -252,7 +266,7 @@ class QuadrupedKinematicFeasibility():
                 err[6*k:6*k+3] = pinocchio.log(dMi).vector[:3] # Just position error
                 J_full[6*k:6*(k+1), :] = pinocchio.computeFrameJacobian(pin_model, pin_data, q, frame_id)
             
-            if norm(err) < QuadrupedKinematicFeasibility.EPS:
+            if norm(err) < eps:
                 success = True
                 break
 
@@ -260,9 +274,9 @@ class QuadrupedKinematicFeasibility():
                   QuadrupedKinematicFeasibility.DAMP * np.eye(J_full.shape[0]), err))
             v = np.clip(v, -QuadrupedKinematicFeasibility.CLIP_ARRAY, QuadrupedKinematicFeasibility.CLIP_ARRAY)
             v[3:6] += np.random.randn(3) / 50. # Hack to make the orientation more stable
-            q = pinocchio.integrate(pin_model, q, v * dt)
+            q = pinocchio.integrate(pin_model, q, v * dt_)
 
-            dt += QuadrupedKinematicFeasibility.DT_INCR
+            dt_ += QuadrupedKinematicFeasibility.DT_INCR
             i += 1
             
         return (success, q)
@@ -290,7 +304,10 @@ class QuadrupedKinematicFeasibility():
                     self.robot.pin_data,
                     self.q0,
                     feet_pos,
-                    self.frame_ids_feet)
+                    self.frame_ids_feet,
+                    self.dt,
+                    self.eps,
+                    self.it_max,)
                     for feet_pos in desired_feet_pos
                 ]
             )

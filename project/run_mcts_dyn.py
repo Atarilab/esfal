@@ -8,9 +8,12 @@ from mpc_controller.motions.cyclic.go2_bound import bound
 from mj_pin_wrapper.sim_env.utils import RobotModelLoader
 from mj_pin_wrapper.abstract.robot import QuadrupedWrapperAbstract
 from mj_pin_wrapper.simulator import Simulator
+
 from environment.stepping_stones import SteppingStonesEnv
 from environment.sim import SteppingStonesSimulator
+
 from utils.visuals import desired_contact_locations_callback
+from tree_search.mcts_dyn import MCTSSteppingStonesDyn
 
 class Go2Config:
     name = "go2"
@@ -33,27 +36,12 @@ if __name__ == "__main__":
     stepping_stones = SteppingStonesEnv(
         grid_size=(10, 3),
         spacing=(0.18, 0.14),
-        size_ratio=(0.8, 0.8),
+        size_ratio=(0.75, 0.85),
         height=stepping_stones_height,
         randomize_pos_ratio=0.,
-        randomize_size_ratio=[0.55, 0.55]
+        randomize_size_ratio=[0.5, 0.6]
     )
-
-    id_contacts_plan = np.array([
-        [26, 6, 24, 4],
-        [26, 6, 24, 4],
-        [27, 7, 24, 4],
-        [27, 7, 24, 4],
-        [27, 7, 25, 5],
-        [28, 8, 25, 5],
-        [28, 8, 25, 5],
-        [28, 8, 26, 6],
-        [28, 8, 26, 6],
-        [28, 8, 26, 6],
-        [28, 8, 26, 6],
-        [28, 8, 26, 6],
-        ])
-
+    
     xml_string = stepping_stones.include_env(xml_string)
         
     ### Load robot
@@ -77,12 +65,36 @@ if __name__ == "__main__":
         desired_contact_locations_callback(viewer, step, q, v, data, controller)
         )
 
-    # Run
-    goal_reached = simulator.run_contact_plan(
-        id_contacts_plan,
-        use_viewer=True,
-        visual_callback_fn=visual_callback
-        )
+    ### MCTS
+    RUN_ID = 8
+    REGRESSOR_PATH = f"/home/atari_ws/project/learning_jump_feasibility/logs/MLP_regressor/{RUN_ID}/MLP.pth"
+
+    RUN_ID = 0
+    CLASSIFIER_PATH = f"/home/atari_ws/project/learning_jump_feasibility/logs/MLPclassifierBinary/{RUN_ID}/MLP.pth"
+
+    mcts = MCTSSteppingStonesDyn(
+        simulator,
+        simulation_steps=1,
+        alpha_exploration=0.01,
+        C=1.,
+        W=1.,
+        state_estimator_state_path=REGRESSOR_PATH,
+        classifier_state_path=CLASSIFIER_PATH,
+        max_solution_search=10,
+        print_info=True
+    )
+    start = [26, 6, 24, 4]
+    goal = [28, 8, 26, 6]
     
-    if goal_reached: print("Goal reached.")
-    else: print("Failed")
+    simulator.set_start_and_goal(start_indices=start)
+    
+    mcts.search(
+        start, goal
+    )
+    
+    for fn_name, timings in mcts.get_timings().items():
+        print(fn_name, timings)
+    
+    print(mcts.solutions)
+    
+    simulator.run_contact_plan(mcts.solutions[5], use_viewer=True)

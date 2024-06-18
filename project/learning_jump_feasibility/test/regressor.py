@@ -76,6 +76,7 @@ simulator.set_start_and_goal(start_indices=id_contacts_plan[0], goal_indices=[])
 ### Load regressor model
 regressor = load_model(REGRESSOR_PATH)
 classifier = load_model(CLASSIFIER_PATH)
+q, v = robot.get_pin_state()
 
 with mujoco.viewer.launch_passive(robot.mj_model, robot.mj_data) as viewer:
     
@@ -92,15 +93,14 @@ with mujoco.viewer.launch_passive(robot.mj_model, robot.mj_data) as viewer:
             target_pos_w = stepping_stones.positions[id_contacts_plan[i+1]]
             position_3d_callback(viewer, target_pos_w)
             
-            success, proba_success = is_feasible(classifier, robot, start_pos_w, target_pos_w, 0.7)
+            success, proba_success = is_feasible(classifier, q, v, start_pos_w, target_pos_w, 0.7)
             print(success, proba_success)
             
             robot.step()
             viewer.sync()
             time.sleep(2)
         
-            q, v, _ = predict_next_state(regressor, robot, start_pos_w, target_pos_w)
+            q, v, _ = predict_next_state(regressor, q, v, robot, start_pos_w, target_pos_w)
             
             robot.mj_data.qpos = robot.pin2mj_state(copy.deepcopy(q))
             robot.mj_data.qvel = v
-

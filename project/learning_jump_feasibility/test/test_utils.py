@@ -48,17 +48,14 @@ def align_3d_points(A, B):
     
     return t, r
     
-def predict_next_state(model, robot, start_pos_w, target_pos_w):
-    
-    ### Current state
-    q_t, v_t = robot.get_pin_state()
+def predict_next_state(model, q, v, robot, start_pos_w, target_pos_w):
     
     ### Predict next state with the network
-    W_T_b = pin.XYZQUATToSE3(q_t[:7])
+    W_T_b = pin.XYZQUATToSE3(q[:7])
     b_T_W = W_T_b.inverse()
     feet_pos_b = transform_points(b_T_W, start_pos_w).reshape(-1)
     target_pos_b = transform_points(b_T_W, target_pos_w).reshape(-1)
-    state = np.concatenate((q_t[3:], v_t[:6]), axis=0) # Should have the right shape depending on the model input size
+    state = np.concatenate((q[3:], v[:6]), axis=0) # Should have the right shape depending on the model input size
     input = torch.from_numpy(np.concatenate((state, target_pos_b, feet_pos_b), axis=0)).float().unsqueeze(0)
 
     with torch.no_grad():
@@ -72,7 +69,7 @@ def predict_next_state(model, robot, start_pos_w, target_pos_w):
     # Set robot to predicted configuration
     robot_copy = copy.copy(robot)
 
-    q_pred = np.concatenate((q_t[:3], q_pred.tolist()))
+    q_pred = np.concatenate((q[:3], q_pred.tolist()))
     q_pred[3:7] = np.abs(q_pred[3:7])
     q_pred[3:7] /= np.linalg.norm(q_pred[3:7])
     q_pred_mj = robot.pin2mj_state(q_pred)
@@ -103,27 +100,25 @@ def predict_next_state(model, robot, start_pos_w, target_pos_w):
     return q_pred, v_pred, mpc_input_pos_w
 
     
-def is_feasible(classifier, robot, start_pos_w, target_pos_w, threshold) -> bool:
-    
-    ### Current state
-    q_t, v_t = robot.get_pin_state()
-    
+def is_feasible(classifier, q, v, start_pos_w, target_pos_w, threshold) -> np.ndarray:
+        
     ### Compute classification score with the network
-    W_T_b = pin.XYZQUATToSE3(q_t[:7])
+    W_T_b = pin.XYZQUATToSE3(q[:7])
     b_T_W = W_T_b.inverse()
-    feet_pos_b = transform_points(b_T_W, start_pos_w).reshape(-1)
-    target_pos_b = transform_points(b_T_W, target_pos_w).reshape(-1)
-    state = np.concatenate((q_t[3:], v_t[:6]), axis=0) # Should have the right shape depending on the model input size
-    input = torch.from_numpy(np.concatenate((state, target_pos_b, feet_pos_b), axis=0)).float().unsqueeze(0)
+    feet_pos_b = transform_points(b_T_W, start_pos_w.reshape(-1, 3)).reshape(-1, 12)
+    target_pos_b = transform_points(b_T_W, target_pos_w.reshape(-1, 3)).reshape(-1, 12)
+    B = len(target_pos_b)
+    
+    state = np.concatenate((q[3:], v[:6]), axis=0) # Should have the right shape depending on the model input size
+    state_batched = np.repeat((state[np.newaxis, :]), B, axis=0) # Batch the input
+    
+    input = torch.from_numpy(np.concatenate((state_batched, target_pos_b, feet_pos_b), axis=-1)).float()
 
     with torch.no_grad():
         score = classifier(input).squeeze()
         
-    proba_success = torch.nn.functional.sigmoid(score).item()
-    success = False
+    proba_success = torch.nn.functional.sigmoid(score).numpy()
+    success = proba_success > threshold
     
-    if proba_success > threshold:
-        success = True
-        
     return success, proba_success
         

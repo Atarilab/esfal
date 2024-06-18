@@ -166,7 +166,8 @@ class MCTS():
         
         self.timings = defaultdict(float)
 
-    def is_terminal(self, start_state : State, state_goal : State) -> bool:
+    @staticmethod
+    def is_terminal(start_state : State, state_goal : State) -> bool:
         return start_state == state_goal
     
     def get_children(self, state : State) -> List[State]:

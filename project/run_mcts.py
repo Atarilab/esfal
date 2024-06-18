@@ -41,7 +41,7 @@ if __name__ == "__main__":
         randomize_pos_ratio=0.,
         randomize_size_ratio=[0.5, 0.6]
     )
-
+    
     xml_string = stepping_stones.include_env(xml_string)
         
     ### Load robot
@@ -68,11 +68,11 @@ if __name__ == "__main__":
     ### MCTS
     mcts = MCTSSteppingStones(
         simulator,
-        simulation_steps=3,
-        alpha_exploration=0.1,
-        C=10.,
-        W=5,
-        max_solution_search=2,
+        simulation_steps=2,
+        alpha_exploration=0.,
+        C=5.,
+        W=1.,
+        max_solution_search=1,
         print_info=True
     )
     start = [26, 6, 24, 4]
@@ -82,4 +82,9 @@ if __name__ == "__main__":
         start, goal
     )
     
-    print(mcts.get_timings())
+    for fn_name, timings in mcts.get_timings().items():
+        print(fn_name, timings)
+    
+    print(mcts.solutions)
+    
+    simulator.run_contact_plan(mcts.solutions[0], use_viewer=True)
