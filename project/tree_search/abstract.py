@@ -22,7 +22,8 @@ class Node:
     def __init__(self) -> None:
         self.visit = 0
         self.actions = defaultdict(Action)             # { child state (hash): Action }
-    
+        self.expanded = False
+        
     def increment_visit(self) -> None:
         self.visit += 1
 
@@ -51,6 +52,10 @@ class Tree:
         h = self.hash_state(state)
         return bool(self.nodes[h].actions)
     
+    def expanded(self, state : State) -> bool:
+        h = self.hash_state(state)
+        return self.nodes[h].expanded
+    
     def get_children(self, state : State) -> List[State]:
         h = self.hash_state(state)
         node = self.nodes[h]
@@ -59,14 +64,16 @@ class Tree:
     def add_children_to_node(self, state : State, children_states : List[State]) -> None:
         h = self.hash_state(state)
         node = self.nodes[h] # Create node if not exists
+        node.expanded = True
         if not node.actions:
             # Add children nodes to the tree
             h_children = list(map(self.hash_state, children_states))            
-            self.nodes.update({h_child : Node() for h_child in h_children if not h_child in self.nodes.keys()})
+            if len(h_children) > 0:
+                self.nodes.update({h_child : Node() for h_child in h_children if not h_child in self.nodes.keys()})
+                
+                # Add actionhas_childrens and children to current state 
+                node.actions = {h_child : Action() for h_child in h_children}
             
-            # Add actions and children to current state 
-            node.actions = {h_child : Action() for h_child in h_children}
-
     def update_value_visit_action(self, stateA : State, stateB : State, reward : float) -> None:
         hA = self.hash_state(stateA)
         hB = self.hash_state(stateB)
@@ -156,7 +163,7 @@ class MCTS():
         self.solutions = []
 
         optional_args = {
-            "max_depth_selection" : 10,
+            "max_depth_selection" : 8,
             "max_solution_search" : 10,
             "print_info" : False,
         }
@@ -196,16 +203,20 @@ class MCTS():
         self.tree.current_search_path = []
 
         depth = 0
-        while depth < self.max_depth_selection:
+        while True:
             self.tree.current_search_path.append(state)
 
+            if depth >= self.max_depth_selection:
+                break
+            
             # Select node that haven't been expanded
-            if not self.tree.has_children(state):
+            if not self.tree.expanded(state) or not self.tree.has_children(state):
                 break
 
             # Select one of the children that haven't been expanded if exists
             children = self.tree.get_children(state)
-            unexplored = list(filter(lambda state: not self.tree.has_children(state), children))
+            unexplored = list(filter(lambda state: not self.tree.expanded(state), children))
+
             if unexplored:
                 state = self.heuristic(unexplored, state_goal)
                 self.tree.current_search_path.append(state)
@@ -215,7 +226,7 @@ class MCTS():
             depth += 1
             # If all node have been expanded, select action with maximum UCB score
             state = max(children, key=lambda child_state: self.tree.UCB(state, child_state, self.C))
-        
+
         return state
     
     @timing("expansion")

@@ -1,10 +1,13 @@
 import os
 import glob
+from typing import Tuple
 import torch
+import torch.nn as nn
 import pinocchio as pin
 import copy
 import numpy as np
 
+from mj_pin_wrapper.abstract.robot import RobotWrapperAbstract
 from learning_jump_feasibility.data.dataset_supervised import transform_points
 from learning_jump_feasibility.models.MLP import MLP
 from learning_jump_feasibility.utils.config import Config
@@ -32,9 +35,9 @@ def align_3d_points(A, B):
     """
     Compute transform to minimize distance
     between 2 sets of points.
+    https://stackoverflow.com/questions/60877274/optimal-rotation-in-3d-with-kabsch-algorithm
     """
 
-    # https://stackoverflow.com/questions/60877274/optimal-rotation-in-3d-with-kabsch-algorithm
     t = np.mean(A, axis=0) - np.mean(B, axis=0)
     h = A.T @ B
 
@@ -48,8 +51,29 @@ def align_3d_points(A, B):
     
     return t, r
     
-def predict_next_state(model, q, v, robot, start_pos_w, target_pos_w):
-    
+def  predict_next_state(model : nn.Module,
+                        q : np.ndarray,
+                        v : np.ndarray,
+                        robot : RobotWrapperAbstract,
+                        start_pos_w : np.ndarray,
+                        target_pos_w : np.ndarray,
+                        ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Predict the state at next jump.
+
+    Args:
+        model (nn.Module): state estimator model.
+        q: position state [pos, quat, joint pos]
+        v: velocity state [v, w, joint vel]
+        start_pos_w: start positions in world frame [B, 4, 3]
+        target_pos_w: target positions in world frame [B, 4, 3]
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray, np.ndarray]:
+            - predicted position state
+            - predicted velocity state
+            - predicted mpc inputs in current base frame (not offset).
+    """
     ### Predict next state with the network
     W_T_b = pin.XYZQUATToSE3(q[:7])
     b_T_W = W_T_b.inverse()
@@ -80,19 +104,19 @@ def predict_next_state(model, q, v, robot, start_pos_w, target_pos_w):
     feet_pos_pred_w = robot_copy.get_pin_feet_position_world()
 
     # Compute transform to align feet and target positions
-    t, r = align_3d_points(target_pos_w, feet_pos_pred_w)
+    t, _ = align_3d_points(target_pos_w, feet_pos_pred_w)
 
     # Apply transformation from current base pose
     b0_T_b1 = pin.XYZQUATToSE3(np.zeros(7))
     b0_T_b1.translation = t
-    b0_T_b1.rotation = np.eye(3)
+    b0_T_b1.rotation = np.eye(3) # Rotation is estimated by the network
 
     W_T_b1 = W_T_b * b0_T_b1
 
     q_pred[:7] = pin.SE3ToXYZQUAT(W_T_b1)
     
     # Express mpc input in world frame knowing the current pose
-    mpc_input_pos_w = transform_points(W_T_b1, mpc_input_pos_b.reshape(4,3))
+    mpc_input_pos_w = transform_points(W_T_b, mpc_input_pos_b.reshape(4,3))
     
     # Append joint vel
     v_pred = np.concatenate((v_pred, np.zeros(12)))
@@ -100,8 +124,28 @@ def predict_next_state(model, q, v, robot, start_pos_w, target_pos_w):
     return q_pred, v_pred, mpc_input_pos_w
 
     
-def is_feasible(classifier, q, v, start_pos_w, target_pos_w, threshold) -> np.ndarray:
-        
+def is_feasible(classifier : nn.Module,
+                q : np.ndarray,
+                v : np.ndarray,
+                start_pos_w : np.ndarray,
+                target_pos_w : np.ndarray,
+                threshold : float = .8,
+                ) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Returns if a jump is feasible or not according to the classifier
+    as well as the probability of success.
+
+    Args:
+        classifier: Binary classifier. Output should be score.
+        q: position state [pos, quat, joint pos]
+        v: velocity state [v, w, joint vel]
+        start_pos_w: start positions in world frame [B, 4, 3]
+        target_pos_w: target positions in world frame [B, 4, 3]
+        threshold: classifier threshold.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray]: success [B], probability [B]
+    """
     ### Compute classification score with the network
     W_T_b = pin.XYZQUATToSE3(q[:7])
     b_T_W = W_T_b.inverse()

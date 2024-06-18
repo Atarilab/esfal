@@ -212,7 +212,18 @@ class QuadrupedKinematicFeasibility():
         check1 = (ccw_ACD != ccw_BCD) & (ccw_ABC != ccw_ABD)
         check2 = (ccw_ABD != ccw_CBD) & (ccw_ACB != ccw_ACD)
 
-        id_not_crossing = np.bitwise_not(check1 | check2).squeeze()
+        # Check if A, B, C or D are not at the same locations
+        non_zero = lambda a : np.sum(a, axis=-1) != 0.
+        id_different_locations = (
+            non_zero(D_A) &
+            non_zero(D_B) &
+            non_zero(D_C) &
+            non_zero(C_A) &
+            non_zero(C_B) &
+            non_zero(B_A)
+        )
+        
+        id_not_crossing = np.bitwise_not(check1 | check2).squeeze() & id_different_locations.squeeze()
 
         return id_not_crossing
 

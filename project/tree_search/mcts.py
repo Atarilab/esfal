@@ -164,7 +164,6 @@ class MCTSSteppingStones(MCTS):
                 simulation_path.append(state)
             else:
                 break
-        
         contact_plan = self.tree.current_search_path + simulation_path
         reward = self.reward(contact_plan, goal_state, self.d_max, self.W, self.sim)
         solution_found = reward >= 1

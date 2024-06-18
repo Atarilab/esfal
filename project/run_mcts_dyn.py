@@ -75,22 +75,20 @@ if __name__ == "__main__":
     mcts = MCTSSteppingStonesDyn(
         simulator,
         simulation_steps=1,
-        alpha_exploration=0.01,
+        alpha_exploration=0.0,
         C=1.,
         W=1.,
         state_estimator_state_path=REGRESSOR_PATH,
         classifier_state_path=CLASSIFIER_PATH,
         max_solution_search=10,
-        print_info=True
+        print_info=True,
     )
     start = [26, 6, 24, 4]
     goal = [28, 8, 26, 6]
     
     simulator.set_start_and_goal(start_indices=start)
     
-    mcts.search(
-        start, goal
-    )
+    mcts.search(start, goal)
     
     for fn_name, timings in mcts.get_timings().items():
         print(fn_name, timings)
