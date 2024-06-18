@@ -66,6 +66,7 @@ RUN sudo apt-get update \
 RUN pip install pybind11[global]
 
 # Dependencies
+RUN python3 -m pip install "numpy<2.0.0"
 RUN python3 -m pip install --upgrade pip pytest matplotlib jupyter PyQt5
 RUN python3 -m pip install --upgrade robot_descriptions mujoco mujoco-mjx
 RUN python3 -m pip install --upgrade tyro torch diffusers tensorboard scikit-learn
