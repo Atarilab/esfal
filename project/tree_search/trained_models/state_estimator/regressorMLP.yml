@@ -1,0 +1,40 @@
+DATA: # arguments that will be passed to get_dataloaders
+  name: "regressor"
+  batch_size: 1024
+  noise_std: 7.0e-3
+  exclude: "pos_vj"
+  data_path: "/home/atari_ws/data/learning_jump_feasibility"
+
+MODEL:
+  model_name: MLP
+  PARAMS: # arguments that will be passed to the chosen models
+    input_dim: 46
+    output_dim: 34
+    n_hidden: 3
+    latent_dim: 128
+    activation: ELU
+
+TRAINING: # arguments that will be passed to the trainer
+  criterion_str: MSELoss # BCEWithLogitsLoss # 
+  optimizer:
+    optimizer_name: Adam
+    PARAMS:
+      lr: 0.0006
+  epochs: 100
+  logdir: "./logs/MLP_regressor/"
+  use_logger: True
+  ckpt_every: -1
+  # lr_scheduler:
+  #   lr_scheduler_name: ExponentialLR
+  #   PARAMS:
+  #     gamma: 0.98
+
+# SWEEP: # arguments to sweep over and their values
+#   latent_dim: [16, 32, 64]
+#   n_hidden: [3, 4]
+#   batch_size: [32, 64, 128]
+  # lr:
+  #   min: 0.0001
+  #   max: 0.001
+  #   n: 2
+  #   logspace: True
