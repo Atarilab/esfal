@@ -1,3 +1,7 @@
+import os
+# USe GPU rendering
+os.environ['MUJOCO_GL'] = 'egl'
+
 import numpy as np
 
 from mpc_controller.bicon_mpc import BiConMPC
@@ -11,6 +15,8 @@ from mj_pin_wrapper.simulator import Simulator
 from environment.stepping_stones import SteppingStonesEnv
 from environment.sim import SteppingStonesSimulator
 from utils.visuals import desired_contact_locations_callback
+
+
 
 class Go2Config:
     name = "go2"
@@ -64,6 +70,12 @@ if __name__ == "__main__":
         rotor_inertia=cfg.rotor_inertia,
         gear_ratio=cfg.gear_ratio,
         foot_size=cfg.foot_size,
+        
+        render_video=True,
+        fps=30,
+        video_path="test.mp4",
+        playback_speed=0.5,
+        frame_height=1080, frame_width=1920,
         )
     
     ### Controller
@@ -80,7 +92,7 @@ if __name__ == "__main__":
     # Run
     goal_reached = simulator.run_contact_plan(
         id_contacts_plan,
-        use_viewer=True,
+        use_viewer=False,
         visual_callback_fn=visual_callback
         )
     

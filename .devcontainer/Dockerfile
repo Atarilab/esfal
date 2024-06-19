@@ -70,6 +70,7 @@ RUN python3 -m pip install "numpy<2.0.0"
 RUN python3 -m pip install --upgrade pip pytest matplotlib jupyter PyQt5
 RUN python3 -m pip install --upgrade robot_descriptions mujoco mujoco-mjx
 RUN python3 -m pip install --upgrade tyro torch diffusers tensorboard scikit-learn
+RUN python3 -m pip install --upgrade opencv-python
 
 # Debug Dependencies
 RUN pip3 install memray memory-profiler Pympler
