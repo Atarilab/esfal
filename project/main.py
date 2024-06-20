@@ -35,29 +35,31 @@ if __name__ == "__main__":
     package_dir = RobotModelLoader.get_paths(cfg.name, mesh_dir=cfg.mesh_dir)
     
     ### Stepping stones env
-    stepping_stones_height = 0.1
+    stepping_stones_height = 0.05
+    # stepping_stones = SteppingStonesEnv(
+    #     grid_size=(10, 3),
+    #     spacing=(0.18, 0.14),
+    #     size_ratio=(0.8, 0.8),
+    #     height=stepping_stones_height,
+    #     randomize_pos_ratio=0.,
+    #     randomize_size_ratio=[0.55, 0.55]
+    # )
     stepping_stones = SteppingStonesEnv(
-        grid_size=(10, 3),
-        spacing=(0.18, 0.14),
+        grid_size=(7, 5),
+        spacing=(0.18, 0.28/2),
         size_ratio=(0.8, 0.8),
         height=stepping_stones_height,
         randomize_pos_ratio=0.,
-        randomize_size_ratio=[0.55, 0.55]
+        randomize_size_ratio=[0.55, 0.55],
+        shape="cylinder"
     )
-
+    
     id_contacts_plan = np.array([
-        [26, 6, 24, 4],
-        [26, 6, 24, 4],
-        [27, 7, 24, 4],
-        [27, 7, 24, 4],
-        [27, 7, 25, 5],
-        [28, 8, 25, 5],
-        [28, 8, 25, 5],
-        [28, 8, 26, 6],
-        [28, 8, 26, 6],
-        [28, 8, 26, 6],
-        [28, 8, 26, 6],
-        [28, 8, 26, 6],
+        [23, 9, 21, 7],
+        [24, 10, 22, 8],
+        [32, 11, 23, 16],
+        [32, 18, 30, 16],
+        [32, 18, 30, 16]
         ])
 
     xml_string = stepping_stones.include_env(xml_string)
@@ -70,12 +72,6 @@ if __name__ == "__main__":
         rotor_inertia=cfg.rotor_inertia,
         gear_ratio=cfg.gear_ratio,
         foot_size=cfg.foot_size,
-        
-        render_video=True,
-        fps=30,
-        video_path="test.mp4",
-        playback_speed=0.5,
-        frame_height=1080, frame_width=1920,
         )
     
     ### Controller
@@ -93,7 +89,13 @@ if __name__ == "__main__":
     goal_reached = simulator.run_contact_plan(
         id_contacts_plan,
         use_viewer=False,
-        visual_callback_fn=visual_callback
+        visual_callback_fn=visual_callback,
+        
+        record_video=True,
+        fps=30,
+        video_save_path="test.mp4",
+        playback_speed=0.5,
+        frame_height=1080, frame_width=1920,
         )
     
     if goal_reached: print("Goal reached.")

@@ -16,7 +16,7 @@ MODEL:
 
 TRAINING: # arguments that will be passed to the trainer
   criterion_str: BCEWithLogitsLoss
-    PARAMS:
+    # PARAMS:
       
   optimizer:
     optimizer_name: Adam
@@ -31,7 +31,7 @@ TRAINING: # arguments that will be passed to the trainer
   #   PARAMS:
   #     gamma: 0.96
 
-SWEEP: # arguments to sweep over and their values
+# SWEEP: # arguments to sweep over and their values
   # latent_dim: [16, 32, 64]
   # n_hidden: [3, 4]
   # batch_size: [32, 64, 128]

@@ -1,3 +1,7 @@
+import os
+# USe GPU rendering
+os.environ['MUJOCO_GL'] = 'egl'
+
 import numpy as np
 import argparse
 
@@ -37,14 +41,15 @@ if __name__ == "__main__":
     package_dir = RobotModelLoader.get_paths(cfg.name, mesh_dir=cfg.mesh_dir)
     
     ### Stepping stones env
-    stepping_stones_height = 0.1
+    stepping_stones_height = 0.05
     stepping_stones = SteppingStonesEnv(
-        grid_size=(10, 3),
-        spacing=(0.18, 0.14),
-        size_ratio=(0.75, 0.85),
+        grid_size=(7, 4),
+        spacing=(0.18, 0.28/2),
+        size_ratio=(0.8, 0.8),
         height=stepping_stones_height,
         randomize_pos_ratio=0.,
-        randomize_size_ratio=[0.5, 0.6]
+        randomize_size_ratio=[0.55, 0.55],
+        shape="cylinder"
     )
     
     xml_string = stepping_stones.include_env(xml_string)
@@ -67,8 +72,8 @@ if __name__ == "__main__":
     simulator = SteppingStonesSimulator(stepping_stones, robot, controller)
 
     ### MCTS
-    start = [26, 6, 24, 4]
-    goal = [28, 8, 26, 6]
+    start = [23, 9, 21, 7]
+    goal = [25, 11, 23, 9]
     
     if args.mode == "kin":
         mcts = MCTSSteppingStonesKin(
@@ -77,7 +82,7 @@ if __name__ == "__main__":
             alpha_exploration=0.,
             C=5.,
             W=1.,
-            max_solution_search=10,
+            max_solution_search=2,
             print_info=True
         )
     elif args.mode == "dyn":
@@ -87,20 +92,20 @@ if __name__ == "__main__":
 
         mcts = MCTSSteppingStonesDyn(
             simulator,
-            simulation_steps=1,
+            simulation_steps=2,
             alpha_exploration=0.0,
             C=1.,
             W=1.,
             state_estimator_state_path=REGRESSOR_PATH,
             classifier_state_path=CLASSIFIER_PATH,
-            max_solution_search=10,
+            max_solution_search=2,
             feaibility=1.,
             print_info=True,
         )
         # Important to init the robot position
-        simulator.set_start_and_goal(start_indices=start)
+        simulator.set_start_and_goal(start_indices=start, goal_indices=goal)
 
-    mcts.search(start, goal)
+    mcts.search(start, goal, num_iterations=10000)
     
     for fn_name, timings in mcts.get_timings().items():
         print(fn_name, timings)
@@ -110,4 +115,14 @@ if __name__ == "__main__":
     visual_callback = (lambda viewer, step, q, v, data :
         desired_contact_locations_callback(viewer, step, q, v, data, controller)
         )
-    simulator.run_contact_plan(mcts.solutions[0], use_viewer=True, visual_callback_fn=visual_callback)
+    
+    simulator.run_contact_plan(
+        mcts.solutions[0], 
+        use_viewer=False, 
+        visual_callback_fn=visual_callback,
+        
+        record_video=True,
+        fps=30,
+        video_path="test.mp4",
+        playback_speed=0.5,
+        frame_height=1080, frame_width=1920)

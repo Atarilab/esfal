@@ -220,6 +220,7 @@ class SteppingStonesSimulator(Simulator):
                     visual_callback_fn=visual_callback_fn,
                     verbose=verbose,
                     stop_on_collision=True,
+                    **kwargs
                     )
         
         goal_reached = (

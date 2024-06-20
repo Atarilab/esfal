@@ -55,12 +55,6 @@ class RobotWrapperAbstract(object):
             "gear_ratio" : RobotWrapperAbstract.DEFAULT_GEAR_RATIO,
             "joint_damping" : RobotWrapperAbstract.DEFAULT_JOINT_DAMPING,
             "friction_loss" : RobotWrapperAbstract.DEFAULT_FRICTION_LOSS,
-            "render_video" : False,
-            "video_path" : None,
-            "fps" : 30,
-            "playback_speed" : 1,
-            "frame_height": 480,
-            "frame_width": 640,
         }
         optional_args.update(kwargs)
         for k, v in optional_args.items(): setattr(self, k, v)
@@ -70,21 +64,6 @@ class RobotWrapperAbstract(object):
             self.mj_model = mujoco.MjModel.from_xml_path(self.path_xml_mj)
         else: # or from string
             self.mj_model = mujoco.MjModel.from_xml_string(self.path_xml_mj)
-            
-        # image rendering
-        if self.render_video:
-            self.renderer = mujoco.Renderer(self.mj_model, height=self.frame_height, width=self.frame_width)
-            self.frames_count = 0
-            self.VideoWriter = cv2.VideoWriter(
-                self.video_path,
-                cv2.VideoWriter_fourcc(*"mp4v"),
-                self.fps,
-                (self.renderer.width, self.renderer.height)
-            )
-            
-            self.cam = mujoco.MjvCamera()
-            mujoco.mjv_defaultCamera(self.cam)
-            self.cam.distance, self.cam.azimuth, self.cam.elevation = 1.5, -130, -20
         
         # Set model damping and friction loss
         self.mj_model.dof_damping[6:] = RobotWrapperAbstract.DEFAULT_JOINT_DAMPING
@@ -277,15 +256,7 @@ class RobotWrapperAbstract(object):
         Mujoco environment step.
         """
         mujoco.mj_step(self.mj_model, self.mj_data)
-        if self.render_video:
-            if self.frames_count < self.mj_data.time * self.fps / self.playback_speed:
-                self.renderer.update_scene(self.mj_data, self.cam)
-                self.frames_count += 1
-                image = self.renderer.render()
-                image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-                self.VideoWriter.write(image)
                 
-        
         # Update pinocchio state with mujoco data
         q, _ = self.get_pin_state()
         pin.framesForwardKinematics(self.pin_model, self.pin_data, q)
@@ -424,10 +395,6 @@ class RobotWrapperAbstract(object):
         q0, v0 = self.get_pin_state()
         pin.forwardKinematics(self.pin_model, self.pin_data, q0, v0)
         pin.updateFramePlacements(self.pin_model, self.pin_data)
-        
-    def __del__(self):
-        if self.render_video:
-            self.VideoWriter.release()
         
     def pin2mj_state(self, q_pin: np.ndarray) -> np.ndarray:
         """

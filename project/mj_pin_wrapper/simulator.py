@@ -4,6 +4,7 @@ from mujoco import viewer
 import time
 import numpy as np
 import itertools
+import cv2
 
 from .abstract.robot import RobotWrapperAbstract
 from .abstract.controller import ControllerAbstract
@@ -136,6 +137,27 @@ class Simulator(object):
         self.stop_on_collision = kwargs.get("stop_on_collision", False)
         self.visual_callback_fn = visual_callback_fn
         
+        record_video = kwargs.get("record_video", False)
+        if record_video:
+            video_save_path = kwargs.get("video_save_path", "test.mp4")
+            fps = kwargs.get("fps", 30)
+            playback_speed = kwargs.get("playback_speed", 1.0)
+            frame_height = kwargs.get("frame_height", 1080)
+            frame_width = kwargs.get("frame_width", 1920)
+            
+            renderer = mujoco.Renderer(self.robot.mj_model, height=frame_height, width=frame_width)
+            frames_count = 0
+            VideoWriter = cv2.VideoWriter(
+                video_save_path,
+                cv2.VideoWriter_fourcc(*"mp4v"),
+                fps,
+                (renderer.width, renderer.height)
+            )
+            
+            cam = mujoco.MjvCamera()
+            mujoco.mjv_defaultCamera(cam)
+            cam.distance, cam.azimuth, cam.elevation = 1.5, -130, -20
+        
         if self.verbose:
             print("-----> Simulation start")
         
@@ -168,6 +190,15 @@ class Simulator(object):
             sim_start_time = time.time()
             while (simulation_time < 0. or self.sim_step < simulation_time * (1 / self.sim_dt)):
                 self._simulation_step_with_timings(real_time)
+                
+                if record_video and frames_count < self.robot.mj_data.time * fps / playback_speed:
+                    renderer.update_scene(self.robot.mj_data, cam)
+                    frames_count += 1
+                    image = renderer.render()
+                    # print(image.shape)
+                    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+                    VideoWriter.write(image)
+                
                 if self._stop_sim():
                     break
     
@@ -183,7 +214,8 @@ class Simulator(object):
         # Reset flags
         self._reset()
         
-        # TODO: Record video
+        if record_video:
+            VideoWriter.release()
         
     def update_visuals(self, viewer) -> None:
         """

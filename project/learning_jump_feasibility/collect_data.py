@@ -71,7 +71,7 @@ class RecordJumpData(DataRecorderAbstract):
         # Robot making contact or staying in contact
         else:
             self.consecutive_landing += 1
-        print(self.consecutive_landing)
+        # print(self.consecutive_landing)
         return landed
     
     def _get_collision_id(self, cnt_pos_b : np.array) -> int:
@@ -267,7 +267,7 @@ def record_data(robot_source: QuadrupedWrapperAbstract,
             position_3d_callback(viewer, positions)
         
         simulator.run(use_viewer=True, verbose=True, stop_on_collision=True, visual_callback_fn=visual_callback)
-        print(jump_recorder._check_collision())
+        # print(jump_recorder._check_collision())
     else:
         simulator.run(use_viewer=False, verbose=False, stop_on_collision=True)
         jump_recorder.record_failure()
