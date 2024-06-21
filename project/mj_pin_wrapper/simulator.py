@@ -40,6 +40,8 @@ class Simulator(object):
         self.simulation_it_time = []
         self.verbose = False
         self.stop_sim = False
+        self.robot.collided = False
+        self.controller.diverged = False
         
     def _simulation_step(self) -> None:
         """

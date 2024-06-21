@@ -390,12 +390,10 @@ class RobotWrapperAbstract(object):
             
         self.mj_data.qpos = q0
         self.mj_data.qvel = v0
-            
         # Reset pin data
         q0, v0 = self.get_pin_state()
-        pin.forwardKinematics(self.pin_model, self.pin_data, q0, v0)
-        pin.updateFramePlacements(self.pin_model, self.pin_data)
-        
+        pin.framesForwardKinematics(self.pin_model, self.pin_data, q0)
+
     def pin2mj_state(self, q_pin: np.ndarray) -> np.ndarray:
         """
         Convert Pinocchio to MuJoCo state format.
