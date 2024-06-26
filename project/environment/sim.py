@@ -16,7 +16,7 @@ class SteppingStonesSimulator(Simulator):
     # selected set of 4 contact locataions 
     MAX_DIST_RANDOM_LOCATION = 0.07 # m
     # Height offset when initialising start position
-    HEIGHT_OFFSET_START = 0.03 # m
+    HEIGHT_OFFSET_START = 0.01 # m
     # Minimun number of steps the goal is reached consecutively
     MIN_GOAL_CONSECUTIVE = 6
     # Check if robot reached goal every <CHECK_GOAL_PERIOD> steps

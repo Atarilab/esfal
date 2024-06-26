@@ -23,7 +23,7 @@ from tree_search.kinematics import QuadrupedKinematicFeasibility
 
 DEFAULT_PATH = "/home/atari_ws/data/learning_jump_feasibility"
 V = .08
-SCALE_NOISE = 0.04
+SCALE_NOISE = 0.06
 CHANGE_DIR_STEP = 2
 LENGTH = 100
 
@@ -126,19 +126,11 @@ class RecordJumpData(DataRecorderAbstract):
         return collision_contacts
     
     def record_failure(self) -> None:
+        # Last jump is failure
         if len(self.record_state) > 0:
-            # State
-            current_state = np.zeros_like(self.record_state[-1])
-            self.record_state.append(current_state)
-            # Contact
-            contact_locations_w = np.zeros_like(self.record_feet_contact[-1])
-            self.record_feet_contact.append(contact_locations_w)
-            # Target
-            target_location_w = self.contact_plan[self.i_jump + 1]
-            self.record_target_contact.append(target_location_w)
             # Contacts           
             collision_contacts = self._check_collision()
-            self.record_collision.append(collision_contacts)
+            self.record_collision[-1] = collision_contacts
 
     def record(self, q: np.array, v: np.array, robot_data: MjData) -> None:
         self._update_consecutive_landing()
@@ -165,7 +157,7 @@ class RecordJumpData(DataRecorderAbstract):
             self.waiting_for_next_jump = False
     
     def _append_and_save(self, skip_first, skip_last):
-        if len(self.record_state) > 0:
+        if len(self.record_state) - skip_first - skip_last > 0:
 
             # Skip first and last
             N = len(self.record_state)

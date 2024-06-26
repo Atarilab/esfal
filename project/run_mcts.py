@@ -5,7 +5,7 @@ os.environ['MUJOCO_GL'] = 'egl'
 import numpy as np
 import argparse
 
-from mpc_controller.bicon_mpc import BiConMPC
+from mpc_controller.bicon_mpc_offset import BiconMPCOffset
 from mpc_controller.motions.cyclic.go2_trot import trot
 from mpc_controller.motions.cyclic.go2_jump import jump
 from mpc_controller.motions.cyclic.go2_bound import bound
@@ -19,6 +19,10 @@ from environment.sim import SteppingStonesSimulator
 
 from utils.visuals import desired_contact_locations_callback
 from tree_search.mcts_stepping_stones import MCTSSteppingStonesKin, MCTSSteppingStonesDyn
+
+REGRESSOR_PATH = f"/home/atari_ws/project/tree_search/trained_models/state_estimator/1/MLP.pth"
+CLASSIFIER_PATH = f"/home/atari_ws/project/tree_search/trained_models/classifier/0/MLP.pth"
+
 
 class Go2Config:
     name = "go2"
@@ -65,7 +69,7 @@ if __name__ == "__main__":
         )
     
     ### Controller
-    controller = BiConMPC(robot, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
+    controller = BiconMPCOffset(robot, REGRESSOR_PATH, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
     controller.set_gait_params(jump)  # Choose between trot, jump and bound
 
     ### Simulator
@@ -87,19 +91,18 @@ if __name__ == "__main__":
         )
     elif args.mode == "dyn":
         ### MCTS
-        REGRESSOR_PATH = f"/home/atari_ws/project/tree_search/trained_models/state_estimator/MLP.pth"
-        CLASSIFIER_PATH = f"/home/atari_ws/project/tree_search/trained_models/classifier/MLP.pth"
 
         mcts = MCTSSteppingStonesDyn(
             simulator,
-            simulation_steps=2,
+            simulation_steps=1,
             alpha_exploration=0.0,
             C=1.,
             W=1.,
             state_estimator_state_path=REGRESSOR_PATH,
             classifier_state_path=CLASSIFIER_PATH,
             max_solution_search=2,
-            feaibility=1.,
+            feaibility=.2,
+            accuracy=.01,
             print_info=True,
         )
         # Important to init the robot position

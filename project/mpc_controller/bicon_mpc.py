@@ -148,7 +148,7 @@ class BiConMPC(ControllerAbstract):
         """
         return np.isnan(plan).any()
         
-    def get_desired_contacts(self, base_pos_w) -> np.ndarray:
+    def get_desired_contacts(self, q, v) -> np.ndarray:
         """
         Returns the desired contact positions for the <horizon>
         next timesteps of the MPC based on the desired contact plan.
@@ -177,7 +177,7 @@ class BiConMPC(ControllerAbstract):
             # Update the desired velocity
             i = (self.gait_horizon - 1) *  2
             avg_position_next_cnt = np.mean(mpc_contacts[i], axis=0)
-            self.v_des = np.round((avg_position_next_cnt - base_pos_w) / self.gait_period, 2)
+            self.v_des = np.round((avg_position_next_cnt - q[:3]) / self.gait_period, 2)
             self.v_des *= 1.25
             self.v_des[-1] = 0.
 
@@ -213,7 +213,7 @@ class BiConMPC(ControllerAbstract):
                 sim_t,
                 self.v_des,
                 self.w_des,
-                cnt_plan_des=self.get_desired_contacts(q[:3]))
+                cnt_plan_des=self.get_desired_contacts(q, v))
             
             self.diverged = (self._check_if_diverged(self.xs_plan) or
                              self._check_if_diverged(self.us_plan) or

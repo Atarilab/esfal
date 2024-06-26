@@ -25,10 +25,10 @@ from robots.configs import Go2Config
 from learning_jump_feasibility.test.test_utils import load_model
 from learning_jump_feasibility.test.test_utils import predict_next_state, is_feasible
 
-RUN_ID = 8
+RUN_ID = 10
 REGRESSOR_PATH = f"/home/atari_ws/project/learning_jump_feasibility/logs/MLP_regressor/{RUN_ID}/MLP.pth"
 
-RUN_ID = 0
+RUN_ID = 1
 CLASSIFIER_PATH = f"/home/atari_ws/project/learning_jump_feasibility/logs/MLPclassifierBinary/{RUN_ID}/MLP.pth"
 
 ### Configuration and paths
@@ -78,6 +78,8 @@ regressor = load_model(REGRESSOR_PATH)
 classifier = load_model(CLASSIFIER_PATH)
 q, v = robot.get_pin_state()
 
+offset_pos_w = np.zeros((4, 3))
+
 with mujoco.viewer.launch_passive(robot.mj_model, robot.mj_data) as viewer:
     
     viewer.user_scn.flags[mujoco.mjtRndFlag.mjRND_REFLECTION] = 0
@@ -91,16 +93,15 @@ with mujoco.viewer.launch_passive(robot.mj_model, robot.mj_data) as viewer:
         for i in range(len(id_contacts_plan) - 1):
             start_pos_w = stepping_stones.positions[id_contacts_plan[i]]
             target_pos_w = stepping_stones.positions[id_contacts_plan[i+1]]
-            position_3d_callback(viewer, target_pos_w)
+            position_3d_callback(viewer, target_pos_w + offset_pos_w)
             
             success, proba_success = is_feasible(classifier, q, v, start_pos_w, target_pos_w, 0.7)
-            print(success, proba_success)
             
             robot.step()
             viewer.sync()
             time.sleep(2)
         
-            q, v, _ = predict_next_state(regressor, q, v, robot, start_pos_w, target_pos_w)
-            
+            q, v, offset_pos_w = predict_next_state(regressor, q, v, robot, start_pos_w, target_pos_w)
+
             robot.mj_data.qpos = robot.pin2mj_state(copy.deepcopy(q))
             robot.mj_data.qvel = v

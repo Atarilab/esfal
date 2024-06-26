@@ -49,9 +49,7 @@ class CollisionClassifierDataset(Dataset):
         
         
 
-        collision_sum = np.sum(self.collision, axis=-1)
-        self.id_success = np.where(collision_sum == 0)[0]
-        
+        collision_sum = np.sum(self.collision, axis=-1)        
         new_column = (collision_sum == 0).astype(int)
         self.collision = np.column_stack((new_column, self.collision))
             
@@ -80,19 +78,18 @@ class CollisionClassifierDataset(Dataset):
         
         
     def __len__(self):
-        return len(self.id_success)
+        return len(self.state)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, i):
         
-        i = self.id_success[idx]
         input = torch.concatenate(
             (self.state[i], self.feet_contact[i], self.target_contact[i])
         )
         
         if self.binary:
-            target = self.collision[i + 1, 0].unsqueeze(-1)
+            target = self.collision[i, 0].unsqueeze(-1)
         else:
-            target = self.collision[i + 1]
+            target = self.collision[i]
             
         # Add noise to the input data
         if self.noise_std > 0:
@@ -124,13 +121,7 @@ class StateEstimationDataset(Dataset):
 
         # Filter out the samples with collisions
         collision_sum = np.sum(collision, axis=-1)
-        id_success = np.where(collision_sum == 0)[0]
-        # id_failure = np.where(collision_sum > 0)[0]
-        # id_first_jump = np.concatenate(([0], id_failure + 1), axis=0)
-        
-        # Valid id are jump that didn't fail and that are not first jump
-        self.valid_id = id_success
-        
+        self.id_success = np.where(collision_sum == 0)[0]
         self._process_data()
         
     def _process_data(self):
@@ -157,19 +148,19 @@ class StateEstimationDataset(Dataset):
         
         
     def __len__(self):
-        return len(self.valid_id)
+        return len(self.id_success)
 
     def __getitem__(self, idx):
         
-        i = self.valid_id[idx]
+        i = self.id_success[idx]
         input = torch.concatenate(
             # current state, current contact, next contact reached (all in CURRENT base frame)
             (self.state[i], self.next_feet_contact[i], self.feet_contact[i])
         ).unsqueeze(0)
         
         target = torch.concatenate(
-            # next state, input to reach next contact (all in CURRENT base frame)
-            (self.state[i+1], self.target_contact[i])
+            # next state, delta to reach next contact (all in CURRENT base frame)
+            (self.state[i+1], self.target_contact[i]-self.next_feet_contact[i])
         ).unsqueeze(0)
         
         # Add noise to the input data

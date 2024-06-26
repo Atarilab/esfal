@@ -9,7 +9,7 @@ from itertools import product, chain
 from environment.sim import SteppingStonesSimulator
 from tree_search.kinematics import QuadrupedKinematicFeasibility
 from tree_search.abstract import MCTS, timing
-from learning_jump_feasibility.test.test_utils import load_model, is_feasible, predict_next_state
+from learning_jump_feasibility.test.test_utils import load_model, is_feasible, predict_next_state, compute_offsets
 
 # State is the current 4 contact locations, referenced by their indices
 State = List[int]
@@ -186,6 +186,7 @@ class MCTSSteppingStonesDyn(MCTSSteppingStonesKin):
                  classifier_state_path: str = "",
                  classifier_threshold: float = 0.9,
                  safety: float = 1.,
+                 accuracy: float = 1.,
                  **kwargs
                  ) -> None:
         
@@ -203,10 +204,15 @@ class MCTSSteppingStonesDyn(MCTSSteppingStonesKin):
         # Threshold on the probability of success to consider a jump dyn feasible
         self.classifier_threshold = classifier_threshold
         self.safety = safety
+        self.accuracy = accuracy
         # Store the predicted states for each state path, full state {hash : [q, v]}
         self.node_state_dict = {}
         # Store the score associated to each state path, {hash : score}
         self.node_score_dict = {}
+        # Store the input to give to the mpc, {hash : inputs as array [4x3]}
+        self.delta_mpc = {}
+        
+        self.sig = lambda x : 1 / (1 + np.exp(-x))
     
     @timing("selection")
     def selection(self, state: List[int], state_goal: List[int]) -> List[int]:
@@ -290,12 +296,14 @@ class MCTSSteppingStonesDyn(MCTSSteppingStonesKin):
 
         # TODO Batched version
         h_feasible = np.empty_like(h_distance)
+        h_accuracy = np.empty_like(h_distance)
         for i, state in enumerate(states):
             full_path = self.get_full_current_path(state)
             h_state = self.tree.hash_state(full_path)
             h_feasible[i] = self.node_score_dict.get(h_state, 0.)
-        
-        heuristic_values = h_distance + self.safety * h_feasible
+            h_accuracy[i] = 1 / (self.delta_mpc.get(h_state, 1.) + 1e-12)
+
+        heuristic_values = h_distance + self.safety * h_feasible + self.accuracy * self.sig(h_accuracy)
         
         # Exploration
         if np.random.rand() < self.alpha_exploration:
@@ -309,6 +317,29 @@ class MCTSSteppingStonesDyn(MCTSSteppingStonesKin):
         state = states[id]
 
         return state
+    
+    def _recursive_predict(self, full_path):
+        h_full_path = self.tree.hash_state(full_path)
+        if h_full_path in self.node_state_dict:
+            q, v = self.node_state_dict[h_full_path]
+            return q, v
+
+        target_contact_id = full_path[-4:]
+        if len(full_path) < 8:
+            q, v = self.sim.robot.get_pin_state()
+            current_contact_id = full_path[-4:]
+        else:
+            last_path = full_path[:-4]
+            q, v = self._recursive_predict(last_path)
+            current_contact_id = full_path[-8:-4]
+
+        target_contact_w = self.sim.stepping_stones.positions[target_contact_id]
+        current_contact_w = self.sim.stepping_stones.positions[current_contact_id]
+
+        q, v, _ = predict_next_state(self.state_estimator, q, v, self.sim.robot, current_contact_w, target_contact_w)
+        self.node_state_dict[h_full_path] = (q, v)
+
+        return q, v
         
     def predict_robot_state(self) -> np.ndarray:
         """
@@ -318,36 +349,9 @@ class MCTSSteppingStonesDyn(MCTSSteppingStonesKin):
         Returns:
             np.ndarray: state predicted by the regressor
         """
-        full_path = self.get_full_current_path()
-        h_full_path = self.tree.hash_state(full_path)
-        if h_full_path in self.node_state_dict:
-            robot_state = self.node_state_dict[h_full_path]
-            q, v = np.split(robot_state, [7 + 12])
-            return q, v
-    
-        else:
-            target_contact_id = full_path[-4:]
-            # First jump
-            if len(full_path) < 8:
-                q, v = self.sim.robot.get_pin_state()
-                current_contact_id = full_path[-4:]
-            # At least two jumps
-            else:
-                # State before last jump
-                last_path = full_path[:-4]
-                h_last_path = self.tree.hash_state(last_path)
-                last_robot_state = self.node_state_dict[h_last_path]
-                q, v = np.split(last_robot_state, [7 + 12])
-                current_contact_id = full_path[-8:-4]
-            
-            target_contact_w = self.sim.stepping_stones.positions[target_contact_id]
-            current_contact_w = self.sim.stepping_stones.positions[current_contact_id]
 
-            q, v, _ = predict_next_state(self.state_estimator, q, v, self.sim.robot, current_contact_w, target_contact_w)
-            robot_state = np.concatenate((q, v))
-            self.node_state_dict[h_full_path] = robot_state
-            
-        return q, v
+        full_path = self.get_full_current_path()
+        return self._recursive_predict(full_path)
             
     def is_dynamically_feasible(self, state: State, next_states: List[State]) -> np.ndarray:
         """
@@ -380,14 +384,18 @@ class MCTSSteppingStonesDyn(MCTSSteppingStonesKin):
                                                   current_pos_batched_w,
                                                   target_pos_w,
                                                   self.classifier_threshold)
-
+        
+        mpc_offset_w = compute_offsets(self.state_estimator, q, v, current_pos_batched_w, target_pos_w)
+        mpc_offset_dist = np.sum(np.linalg.norm(mpc_offset_w, axis=-1), axis=-1)
+        
         # TODO batch version
         # Save the probability of success, used in the heuristic
-        for next_state, feasible, prob in zip(next_states, dyn_feasible, proba_success):
+        for i, (next_state, feasible, prob) in enumerate(zip(next_states, dyn_feasible, proba_success)):
             if feasible:
                 full_next_path = self.get_full_current_path(next_state)
                 h_full_next_path = self.tree.hash_state(full_next_path)
                 self.node_score_dict[h_full_next_path] = prob.item()
+                self.delta_mpc[h_full_next_path] = mpc_offset_dist[i]
         
         return dyn_feasible
         
@@ -424,3 +432,56 @@ class MCTSSteppingStonesDyn(MCTSSteppingStonesKin):
         legal_next_states = possible_next_contact[feasible]
             
         return legal_next_states
+    
+    @timing("simulation")
+    def simulation(self, state, goal_state) -> float:
+        
+        simulation_path = []
+        for _ in range(self.simulation_steps):
+            
+            # Choose successively one child until goal is reached
+            if self.tree.has_children(state) and not self.is_terminal(state, goal_state):
+                children = self.tree.get_children(state)
+                state = self.heuristic(children, goal_state)
+
+                simulation_path.append(state)
+            else:
+                break
+        contact_plan = self.tree.current_search_path + simulation_path
+        reward = self.reward(contact_plan, goal_state)
+        solution_found = reward >= 1
+        
+        if solution_found:
+            self.solutions.append(contact_plan)
+
+        return reward, solution_found
+    
+    def compute_offset(self, contact_plan: list[list[State]]) -> np.ndarray:
+        L = len(contact_plan)
+        offsets = np.zeros((L, 4, 3))
+        
+        path = list(chain(*self.remove_repeated_elements(contact_plan)))
+        for i in range(1, L):
+            hash_path = self.tree.hash_state(path[:4*i])
+            
+            # TODO Also compute the offset for new state in simulation
+            if hash_path in self.mpc_offset_w.keys():
+                offsets[i] = self.mpc_offset_w[hash_path]
+           
+        return offsets
+    
+    def reward(self,
+               contact_plan: list[list[State]],
+               goal_state : State,
+               ) -> float:
+        
+        if contact_plan[-1] != goal_state:
+            avg_d_goal = MCTSSteppingStonesKin.avg_dist_to_goal(
+                self.sim.stepping_stones.positions,
+                contact_plan[-1],
+                goal_state,
+            )[0]
+            return 1 - avg_d_goal / self.d_max
+        
+        goal_reached = self.sim.run_contact_plan(contact_plan) * self.W
+        return goal_reached

@@ -85,7 +85,7 @@ def  predict_next_state(model : nn.Module,
     with torch.no_grad():
         out = model(input).squeeze()
         
-    q_pred, v_pred, mpc_input_pos_b = torch.split(out, [16, 6, 12], dim=-1)
+    q_pred, v_pred, mpc_offset_pos_b = torch.split(out, [16, 6, 12], dim=-1)
 
     ### Find transform for base pose to align feet location in current configuration
     ### and target locations
@@ -115,13 +115,56 @@ def  predict_next_state(model : nn.Module,
 
     q_pred[:7] = pin.SE3ToXYZQUAT(W_T_b1)
     
-    # Express mpc input in world frame knowing the current pose
-    mpc_input_pos_w = transform_points(W_T_b, mpc_input_pos_b.reshape(4,3))
+    # Express mpc input offset in world frame, since it's a vector, no translation
+    W_T_b.translation = np.zeros(3)
+    mpc_offset_pos_w = transform_points(W_T_b, mpc_offset_pos_b.reshape(4,3))
     
     # Append joint vel
     v_pred = np.concatenate((v_pred, np.zeros(12)))
     
-    return q_pred, v_pred, mpc_input_pos_w
+    return q_pred, v_pred, mpc_offset_pos_w
+
+def compute_offsets(model : nn.Module,
+                    q : np.ndarray,
+                    v : np.ndarray,
+                    start_pos_w : np.ndarray,
+                    target_pos_w : np.ndarray,
+                    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Predict the state at next jump.
+
+    Args:
+        model (nn.Module): state estimator model.
+        q: position state [pos, quat, joint pos]
+        v: velocity state [v, w, joint vel]
+        start_pos_w: start positions in world frame [B, 4, 3]
+        target_pos_w: target positions in world frame [B, 4, 3]
+
+    Returns:
+        np.ndarray: predicted mpc offset in world frame.
+    """
+    ### Predict next state with the network
+    W_T_b = pin.XYZQUATToSE3(q[:7])
+    b_T_W = W_T_b.inverse()
+    feet_pos_b = transform_points(b_T_W, start_pos_w.reshape(-1, 3)).reshape(-1, 12)
+    target_pos_b = transform_points(b_T_W, target_pos_w.reshape(-1, 3)).reshape(-1, 12)
+    B = len(target_pos_b)
+    
+    state = np.concatenate((q[3:], v[:6]), axis=0) # Should have the right shape depending on the model input size
+    state_batched = np.repeat((state[np.newaxis, :]), B, axis=0) # Batch the input
+    
+    input = torch.from_numpy(np.concatenate((state_batched, target_pos_b, feet_pos_b), axis=-1)).float()
+
+    with torch.no_grad():
+        out = model(input).squeeze()
+        
+    _, _, mpc_offset_pos_b = torch.split(out, [16, 6, 12], dim=-1)
+
+    # Express mpc input offset in world frame, since it's a vector, no translation
+    W_T_b.translation = np.zeros(3)
+    mpc_offset_pos_w = transform_points(W_T_b, mpc_offset_pos_b.reshape(-1,3)).reshape(-1, 4, 3)
+    
+    return mpc_offset_pos_w
 
     
 def is_feasible(classifier : nn.Module,
@@ -156,7 +199,7 @@ def is_feasible(classifier : nn.Module,
     state = np.concatenate((q[3:], v[:6]), axis=0) # Should have the right shape depending on the model input size
     state_batched = np.repeat((state[np.newaxis, :]), B, axis=0) # Batch the input
     
-    input = torch.from_numpy(np.concatenate((state_batched, target_pos_b, feet_pos_b), axis=-1)).float()
+    input = torch.from_numpy(np.concatenate((state_batched, feet_pos_b, target_pos_b), axis=-1)).float()
 
     with torch.no_grad():
         score = classifier(input).squeeze()
