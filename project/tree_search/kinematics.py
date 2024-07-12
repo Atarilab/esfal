@@ -101,6 +101,7 @@ class QuadrupedKinematicFeasibility():
                     desired_feet_pos: np.ndarray,
                     allow_crossed_legs: bool = False,
                     check_collision: bool = True,
+                    check_inverse_kinematics: bool = True,
                     ) -> np.ndarray:
         """
         Check if the feet can reach the desired positions.
@@ -111,6 +112,7 @@ class QuadrupedKinematicFeasibility():
             - desired_feet_pos (np.ndarray): Feet positions to reach. Shape [N, 4, 3].
             - allow_crossed_legs (bool, optional): Allow positions where the legs are crossing. Defaults to False.
             - check_collision (bool): If solution found, check self-collision.
+            - check_inverse_kinematics (bool): Check if kinematically feasible with inverse kinematics.
         Returns:
             np.ndarray: Quadruped can reach the 4 contact locations simultaneously. Shape [Nr].
         """
@@ -126,12 +128,13 @@ class QuadrupedKinematicFeasibility():
             feasible[feasible] &= self._check_cross_legs(desired_feet_pos[feasible])
 
         # Perform inverse kinematics on feasible positions
-        ik_feasible, configurations = self._inverse_kinematics(desired_feet_pos[feasible])
-        feasible[feasible] &= ik_feasible
+        if check_inverse_kinematics:
+            ik_feasible, configurations = self._inverse_kinematics(desired_feet_pos[feasible])
+            feasible[feasible] &= ik_feasible
 
-        # Check for collisions if necessary
-        if check_collision:
-            feasible[feasible] &= self._self_check_collision(configurations)
+            # Check for collisions if necessary
+            if check_collision:
+                feasible[feasible] &= self._self_check_collision(configurations)
   
         return feasible
         

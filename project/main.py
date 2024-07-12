@@ -5,6 +5,7 @@ os.environ['MUJOCO_GL'] = 'egl'
 import numpy as np
 
 from mpc_controller.bicon_mpc_offset import BiconMPCOffset
+from mpc_controller.bicon_mpc import BiConMPC
 from mpc_controller.motions.cyclic.go2_trot import trot
 from mpc_controller.motions.cyclic.go2_jump import jump
 from mpc_controller.motions.cyclic.go2_bound import bound
@@ -35,39 +36,49 @@ if __name__ == "__main__":
     package_dir = RobotModelLoader.get_paths(cfg.name, mesh_dir=cfg.mesh_dir)
     
     ### Stepping stones env
-    stepping_stones_height = 0.05
+    stepping_stones_height = 0.2
+
     # stepping_stones = SteppingStonesEnv(
     #     grid_size=(10, 3),
     #     spacing=(0.18, 0.14),
     #     size_ratio=(0.8, 0.8),
     #     height=stepping_stones_height,
     #     randomize_pos_ratio=0.,
-    #     randomize_size_ratio=[0.55, 0.55]
+    #     randomize_size_ratio=[0.55, 0.55],
+    #     shape="cylinder"
     # )
+
     stepping_stones = SteppingStonesEnv(
-        grid_size=(10, 3),
-        spacing=(0.18, 0.14),
-        size_ratio=(0.8, 0.8),
+        grid_size=(7, 5),
+        spacing=(0.18, 0.28/2),
+        size_ratio=(0.7, 0.7),
         height=stepping_stones_height,
         randomize_pos_ratio=0.,
         randomize_size_ratio=[0.55, 0.55],
         shape="cylinder"
     )
+
+    start = [23, 9, 21, 7]
+    goal = [27, 13, 25, 11]
+
+    state = np.random.get_state()
+    np.random.seed(7)
+    # randomize stones position
+    stepping_stones.randomize_center_location(0.0, keep=[start, goal])
+
+    stepping_stones.remove_random(N_to_remove=9, keep=[start, goal])
+    print(stepping_stones.id_to_remove)
+    # set the random state back to the original
+    np.random.set_state(state)
     
     id_contacts_plan = np.array([
-        [26, 6, 24, 4],
-        [26, 6, 24, 4],
-        [27, 7, 24, 4],
-        [27, 7, 24, 4],
-        [27, 7, 25, 5],
-        [28, 8, 25, 5],
-        [28, 8, 25, 5],
-        [28, 8, 26, 6],
-        [28, 8, 26, 6],
-        [28, 8, 26, 6],
-        [28, 8, 26, 6],
-        [28, 8, 26, 6],
-        ])
+        [23, 9, 21, 7],
+        [24, 3, 22, 14],
+        [25, 4, 16, 22],
+        [19, 5, 24, 16],
+        [27, 13, 25, 10],
+        [27, 13, 25, 11]
+    ])
 
     xml_string = stepping_stones.include_env(xml_string)
         
@@ -82,8 +93,11 @@ if __name__ == "__main__":
         )
     
     ### Controller
-    MODEL_PATH = "/home/atari_ws/project/tree_search/trained_models/state_estimator/1/MLP.pth"
+    # MODEL_PATH = "/home/atari_ws/project/tree_search/trained_models/state_estimator/1/MLP.pth"
+    # MODEL_PATH = "learning_jump_feasibility/logs/MLP_regressor/1/MLP.pth"
+    MODEL_PATH = "learning_jump_feasibility/logs/MLP_offset/1/MLP.pth"
     controller = BiconMPCOffset(robot, MODEL_PATH, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
+    # controller = BiConMPC(robot, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
     controller.set_gait_params(jump)  # Choose between trot, jump and bound
 
     ### Simulator
@@ -96,14 +110,14 @@ if __name__ == "__main__":
     # Run
     goal_reached = simulator.run_contact_plan(
         id_contacts_plan,
-        use_viewer=True,
+        use_viewer=False,
         visual_callback_fn=visual_callback,
         
-        # record_video=True,
-        # fps=30,
-        # video_save_path="test.mp4",
-        # playback_speed=0.5,
-        # frame_height=1080, frame_width=1920,
+        record_video=True,
+        fps=30,
+        video_save_path="test.mp4",
+        playback_speed=0.5,
+        frame_height=1080, frame_width=1920,
         )
     
     if goal_reached: print("Goal reached.")

@@ -21,9 +21,11 @@ from utils.visuals import desired_contact_locations_callback, position_3d_callba
 from robots.configs import Go2Config
 from tree_search.kinematics import QuadrupedKinematicFeasibility
 
-DEFAULT_PATH = "/home/atari_ws/data/learning_jump_feasibility"
+# DEFAULT_PATH = "/home/atari_ws/data/learning_jump_feasibility"
+DEFAULT_PATH = "/home/akizhanov/esfal/data/learning_jump_feasibility"
 V = .08
-SCALE_NOISE = 0.06
+SCALE_NOISE = 0.12
+# SCALE_NOISE = 0.01
 CHANGE_DIR_STEP = 2
 LENGTH = 100
 
@@ -59,6 +61,13 @@ class RecordJumpData(DataRecorderAbstract):
         self.consecutive_landing = 0
         self.waiting_for_next_jump = True
         self.i_jump = 0
+        self.record_state = []
+        self.record_feet_contact = []
+        self.record_target_contact = []
+        self.record_collision = []
+
+    def update_contact_plan(self, contact_plan) -> None:
+        self.contact_plan = contact_plan
         
     def _update_consecutive_landing(self) -> bool:
         eeff_contact = self.robot.get_mj_eeff_contact_with_floor()
@@ -128,9 +137,22 @@ class RecordJumpData(DataRecorderAbstract):
     def record_failure(self) -> None:
         # Last jump is failure
         if len(self.record_state) > 0:
+            # State
+            current_state = np.zeros_like(self.record_state[-1])
+            self.record_state.append(current_state)
+            # Contact
+            contact_locations_w = np.zeros_like(self.record_feet_contact[-1])
+            self.record_feet_contact.append(contact_locations_w)
+            # Target
+            if self.i_jump + 1 > len(self.contact_plan) - 1:
+                target_location_w = np.array(self.contact_plan[-1])
+            else:
+                target_location_w = self.contact_plan[self.i_jump + 1]
+            self.record_target_contact.append(target_location_w)
             # Contacts           
             collision_contacts = self._check_collision()
-            self.record_collision[-1] = collision_contacts
+            self.record_collision.append(collision_contacts)
+            # self.record_collision[-1] = collision_contacts
 
     def record(self, q: np.array, v: np.array, robot_data: MjData) -> None:
         self._update_consecutive_landing()
@@ -148,7 +170,10 @@ class RecordJumpData(DataRecorderAbstract):
             
             # Target
             self.i_jump = int((robot_data.time + jump.gait_horizon / 2) // (jump.gait_horizon / 2))
-            target_location_w = np.array(self.contact_plan[self.i_jump])
+            if self.i_jump > len(self.contact_plan) - 1:
+                target_location_w = np.array(self.contact_plan[-1])
+            else:
+                target_location_w = np.array(self.contact_plan[self.i_jump])
             self.record_target_contact.append(target_location_w)
 
             # Contacts
@@ -157,7 +182,8 @@ class RecordJumpData(DataRecorderAbstract):
             self.waiting_for_next_jump = False
     
     def _append_and_save(self, skip_first, skip_last):
-        if len(self.record_state) - skip_first - skip_last > 0:
+        # if len(self.record_state) - skip_first - skip_last > 0:
+        if len(self.record_state) > 0:
 
             # Skip first and last
             N = len(self.record_state)
@@ -206,18 +232,34 @@ def create_random_walk_contact_plan(current_feet_pos : np.ndarray,
     if seed is not None:
         np.random.seed(seed)
     contact_plan = [current_feet_pos]
+    moving_offset = np.zeros_like(current_feet_pos)
     N_eeff = current_feet_pos.shape[0]
     for i in range(length):
         
         # Randomized next position
-        if i % change_dir_step == 0:
-            dir_x, dir_y = np.tile(np.random.randint(-1, 2), 4), np.tile(np.random.randint(-1, 2), 4)
-            #dir_x, dir_y = np.random.randint(-1, 2, size=(N_eeff)), np.random.randint(-1, 2, size=(N_eeff))
-        offset = np.array([dir_x, dir_y, np.zeros(N_eeff)]).T * v
-        offset[:, :2] += np.random.randn(4, 2) * scale_noise
+        # if i % change_dir_step == 0:
+        #     # dir_x, dir_y = np.tile(np.random.randint(-1, 2), 4), np.tile(np.random.randint(-1, 2), 4)
+        #     dir_x, dir_y = np.tile(1.0, 4), np.tile(0.0, 4)
+        #     #dir_x, dir_y = np.random.randint(-1, 2, size=(N_eeff)), np.random.randint(-1, 2, size=(N_eeff))
+
+
+        dir_x = np.random.uniform(-0.01, 0.4)
+        dir_y = np.random.uniform(-0.3, 0.3)
+        dir_x, dir_y = np.tile(dir_x, 4), np.tile(dir_y, 4)
+        offset = np.array([dir_x, dir_y, np.zeros(N_eeff)]).T
+        # offset_x = np.random.choice([-0.18, 0, 0.18], 4, p=[0.1, 0.4, 0.5])
+        # offset_y = np.random.choice([-0.14, 0, 0.14], 4, p=[0.2, 0.6, 0.2])
+
+        # offset = np.stack([offset_x, offset_y, np.zeros(N_eeff)], axis=-1)
+
+        moving_offset += offset
+        # moving_offset = np.mean(contact_plan[-1], axis=0)
+        # offset[:, :2] += np.random.randn(4, 2) * scale_noise
         
         # Append to contact plan
-        next_contact = contact_plan[-1] + offset
+        # next_contact = contact_plan[-1] + offset
+        next_contact = current_feet_pos + moving_offset
+        next_contact[:, :2] += np.random.randn(4, 2) * scale_noise
         contact_plan.append(next_contact.tolist())
         
     return contact_plan
@@ -263,7 +305,7 @@ def record_data(robot_source: QuadrupedWrapperAbstract,
     else:
         simulator.run(use_viewer=False, verbose=False, stop_on_collision=True)
         jump_recorder.record_failure()
-        jump_recorder.save(skip_first=1, lock=lock)
+        jump_recorder.save(skip_first=0, lock=lock)
     
     if queue != None:
         queue.put(1)
@@ -301,23 +343,26 @@ if __name__ == "__main__":
         
     else:
     
-        def multiprocess_record_data(saving_path, seed, queue, lock) -> None:
-            r = copy.copy(robot)
-            record_data(r, saving_path, seed, queue, lock)
+        # def multiprocess_record_data(saving_path, seed, queue, lock) -> None:
+        #     r = copy.copy(robot)
+        #     record_data(r, saving_path, seed, queue, lock)
         
-        manager = Manager()
-        lock = manager.Lock()
-        queue = manager.Queue()
-        seeds = np.random.randint(0, 2**32 - 1, size=args.N)
+        # manager = Manager()
+        # lock = manager.Lock()
+        # queue = manager.Queue()
+        # seeds = np.random.randint(0, 2**32 - 1, size=args.N)
 
-        tasks = [(args.saving_path, seed, queue, lock) for seed in seeds]
+        # tasks = [(args.saving_path, seed, queue, lock) for seed in seeds]
         
-        def worker(args):
-            saving_path, seed, queue, lock = args
-            multiprocess_record_data(saving_path, seed, queue, lock)
+        # def worker(args):
+        #     saving_path, seed, queue, lock = args
+        #     multiprocess_record_data(saving_path, seed, queue, lock)
 
-        # Use multiprocessing Pool to run record_data in parallel
-        with Pool(processes=args.cores) as pool:
-            # Wrap the pool.map with tqdm to display the progress bar
-            for _ in tqdm(pool.imap_unordered(worker, tasks), total=args.N):
-                queue.get()
+        # # Use multiprocessing Pool to run record_data in parallel
+        # with Pool(processes=args.cores) as pool:
+        #     # Wrap the pool.map with tqdm to display the progress bar
+        #     for _ in tqdm(pool.imap_unordered(worker, tasks), total=args.N):
+        #         queue.get()
+
+        for _ in tqdm(range(args.N)):
+            record_data(robot, args.saving_path, seed=np.random.randint(0, 2**32 - 1))

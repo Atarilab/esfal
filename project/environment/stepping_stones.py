@@ -55,7 +55,7 @@ class SteppingStonesEnv:
         self._init_center_location()  
         self._init_size()
         self._randomize_height()
-        self._randomize_center_location()
+        self.randomize_center_location()
         
     def _init_center_location(self) -> None:
         """
@@ -86,15 +86,21 @@ class SteppingStonesEnv:
             )
         self.size = size_ratio * min(self.spacing)
         
-    def _randomize_center_location(self) -> None:
+    def randomize_center_location(self, randomize_pos_ratio = 0.0, keep: list[int] = []) -> None:
         """
         Randomize the center of the stepping stones locations.
         """
         max_displacement_x = self.spacing[0] - self.size
         max_displacement_y = self.spacing[1] - self.size
         
-        dx = np.random.rand(self.N) * max_displacement_x * self.randomize_pos_ratio
-        dy = np.random.rand(self.N) * max_displacement_y * self.randomize_pos_ratio
+        # dx = np.random.rand(self.N) * max_displacement_x * randomize_pos_ratio
+        # dy = np.random.rand(self.N) * max_displacement_y * randomize_pos_ratio
+        # add random noise to the stones (between -1 and 1)
+        dx = (np.random.rand(self.N) - 0.5) * max_displacement_x * randomize_pos_ratio
+        dy = (np.random.rand(self.N) - 0.5) * max_displacement_y * randomize_pos_ratio
+
+        dx[keep] = 0.
+        dy[keep] = 0.
 
         self.positions[:, 0] += dx
         self.positions[:, 1] += dy
@@ -113,6 +119,7 @@ class SteppingStonesEnv:
         probs /= np.sum(probs)
         
         self.id_to_remove = np.random.choice(self.N, N_to_remove, replace=False, p=probs)
+        self.positions[self.id_to_remove] = [0.0, 0.0, -1]
         
     def _xml_single_geom_string(self, id: int) -> str:
         """

@@ -18,7 +18,7 @@ class SteppingStonesSimulator(Simulator):
     # Height offset when initialising start position
     HEIGHT_OFFSET_START = 0.01 # m
     # Minimun number of steps the goal is reached consecutively
-    MIN_GOAL_CONSECUTIVE = 6
+    MIN_GOAL_CONSECUTIVE = 3
     # Check if robot reached goal every <CHECK_GOAL_PERIOD> steps
     CHECK_GOAL_PERIOD = 150
     
@@ -41,7 +41,8 @@ class SteppingStonesSimulator(Simulator):
         
         optionals = {
             "min_goal_consecutive" : SteppingStonesSimulator.MIN_GOAL_CONSECUTIVE,            
-            "height_offset" : SteppingStonesSimulator.HEIGHT_OFFSET_START,            
+            "height_offset" : SteppingStonesSimulator.HEIGHT_OFFSET_START,    
+            "update_data_recorder" : False,      
         }
         optionals.update(kwargs)
         for k, v in optionals.items(): setattr(self, k, v)
@@ -215,6 +216,9 @@ class SteppingStonesSimulator(Simulator):
         
         contact_plan_pos = self.stepping_stones.positions[contact_plan_id]
         self.controller.set_contact_plan(contact_plan_pos)
+        if self.update_data_recorder:
+            self.data_recorder.reset()
+            self.data_recorder.update_contact_plan(contact_plan_pos)
 
         super().run(use_viewer=use_viewer,
                     visual_callback_fn=visual_callback_fn,

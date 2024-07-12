@@ -42,16 +42,21 @@ class CollisionClassifierDataset(Dataset):
         self.state = data["state"]
         # Contact positions where robots land [4, 3]
         self.feet_contact = data["contact"]
+        self.next_feet_contact = np.empty_like(self.feet_contact)
         # Next target positions [4, 3]
         self.target_contact = data["target"]
         # Current jump collision state [5] (collision [FL_knee, FR_knee, RL_knee, RR_knee, other])
         self.collision = data["collision"]
         
         
-
-        collision_sum = np.sum(self.collision, axis=-1)        
+        collision_sum = np.sum(self.collision, axis=-1)
+        self.id_success = np.where(collision_sum == 0)[0]  
+          
         new_column = (collision_sum == 0).astype(int)
         self.collision = np.column_stack((new_column, self.collision))
+
+        self.norm_pos = self.feet_contact[0].reshape(4, 3)[:,:2]
+        self.norm_pos = torch.tensor(self.norm_pos, dtype=torch.float32)
             
         self._process_data()
         
@@ -62,10 +67,12 @@ class CollisionClassifierDataset(Dataset):
             # b_T_W is world pose in base frame
             b_T_W = pin.XYZQUATToSE3(self.state[i, :7]).inverse()
             self.feet_contact[i] = transform_points(b_T_W, self.feet_contact[i])
+            self.next_feet_contact[i] = transform_points(b_T_W, self.feet_contact[i+1])
             self.target_contact[i] = transform_points(b_T_W, self.target_contact[i])
         
         self.state = torch.tensor(self.state, dtype=torch.float32)
         self.feet_contact = torch.tensor(self.feet_contact, dtype=torch.float32).reshape(-1, 12)
+        self.next_feet_contact = torch.tensor(self.next_feet_contact, dtype=torch.float32).reshape(-1, 12)
         self.target_contact = torch.tensor(self.target_contact, dtype=torch.float32).reshape(-1, 12)
         self.collision = torch.tensor(self.collision, dtype=torch.float32)
         
@@ -78,18 +85,32 @@ class CollisionClassifierDataset(Dataset):
         
         
     def __len__(self):
-        return len(self.state)
+        # return len(self.state)
+        return len(self.id_success)
 
-    def __getitem__(self, i):
+    def __getitem__(self, idx):
+        i = self.id_success[idx]
         
         input = torch.concatenate(
             (self.state[i], self.feet_contact[i], self.target_contact[i])
         )
         
         if self.binary:
-            target = self.collision[i, 0].unsqueeze(-1)
+            target = self.collision[i+1, 0].unsqueeze(-1)
         else:
-            target = self.collision[i]
+            target = self.collision[i+1]
+
+        dist = torch.norm(self.target_contact[i].reshape(4, 3) - self.next_feet_contact[i].reshape(4, 3), dim=-1)
+        for j in range(4):
+            if dist[j] > 0.08:
+                target = torch.tensor([0], dtype=torch.float32)
+                break
+
+        target_contact_mean = self.target_contact[i].reshape(4, 3)[:,:2].mean(dim=0)
+        # current_contact_mean = self.feet_contact[i].reshape(4, 3)[:,:2].mean(dim=0)
+        norm_contact_pos = self.norm_pos.clone()
+        norm_contact_pos[:, 0] += target_contact_mean[0]
+        norm_dist = torch.norm(norm_contact_pos - self.target_contact[i].reshape(4, 3)[:,:2], dim=-1).mean()
             
         # Add noise to the input data
         if self.noise_std > 0:
@@ -97,7 +118,8 @@ class CollisionClassifierDataset(Dataset):
 
         item = {
             "input": input,
-            "target": target
+            "target": target,
+            "norm_dist": norm_dist
         }
         return item
 
@@ -121,7 +143,12 @@ class StateEstimationDataset(Dataset):
 
         # Filter out the samples with collisions
         collision_sum = np.sum(collision, axis=-1)
-        self.id_success = np.where(collision_sum == 0)[0]
+        # self.id_success = np.where(collision_sum == 0)[0]
+        
+        self.id_success = []
+        for i in range(len(collision_sum) - 2):
+            if collision_sum[i] == 0 and collision_sum[i+1] == 0 :
+                self.id_success.append(i)
         self._process_data()
         
     def _process_data(self):
@@ -155,7 +182,7 @@ class StateEstimationDataset(Dataset):
         i = self.id_success[idx]
         input = torch.concatenate(
             # current state, current contact, next contact reached (all in CURRENT base frame)
-            (self.state[i], self.next_feet_contact[i], self.feet_contact[i])
+            (self.state[i], self.target_contact[i], self.feet_contact[i])
         ).unsqueeze(0)
         
         target = torch.concatenate(
@@ -173,11 +200,88 @@ class StateEstimationDataset(Dataset):
         }
         
         return item
+    
+
+class OffsetEstimationDataset(Dataset):
+    def __init__(self,
+                 data_path,
+                 exclude: str = "pos_vj",
+                 use_height: bool = False,
+                 noise_std : float = 0.):
+        
+        self.exclude = exclude
+        self.use_height = use_height
+        self.noise_std = noise_std
+
+        data = np.load(data_path)
+        self.state = data["state"]
+        self.feet_contact = data["contact"]
+        self.next_feet_contact = np.empty_like(self.feet_contact)
+        self.target_contact = data["target"]
+        collision = data["collision"]
+
+        # Filter out the samples with collisions
+        collision_sum = np.sum(collision, axis=-1)
+        # self.id_success = np.where(collision_sum == 0)[0]
+        
+        self.id_success = []
+        for i in range(len(collision_sum) - 2):
+            if collision_sum[i] == 0 and collision_sum[i+1] == 0 :
+                self.id_success.append(i)
+        self._process_data()
+        
+    def _process_data(self):
+
+        ### Express contact positions in base frame
+        for i in range(len(self.state)-1):
+            # b_T_W is world pose in base frame
+            b_T_W = pin.XYZQUATToSE3(self.state[i, :7]).inverse()
+            self.feet_contact[i] = transform_points(b_T_W, self.feet_contact[i])
+            self.next_feet_contact[i] = transform_points(b_T_W, self.feet_contact[i+1])
+            self.target_contact[i] = transform_points(b_T_W, self.target_contact[i])
+        
+        self.state = torch.tensor(self.state, dtype=torch.float32)
+        self.feet_contact = torch.tensor(self.feet_contact, dtype=torch.float32).reshape(-1, 12)
+        self.next_feet_contact = torch.tensor(self.next_feet_contact, dtype=torch.float32).reshape(-1, 12)
+        self.target_contact = torch.tensor(self.target_contact, dtype=torch.float32).reshape(-1, 12)
+                
+        all_id = np.arange(self.state.shape[1])
+        id_to_exclude = []
+        for name in self.exclude.split("_"):
+            id_to_exclude.extend(ID_DATA[name])
+        id_to_keep = torch.from_numpy(np.setdiff1d(all_id, id_to_exclude)).long().unsqueeze(0)
+        self.state = torch.take_along_dim(self.state, id_to_keep, dim=-1)
+        
+        
+    def __len__(self):
+        return len(self.id_success)
+
+    def __getitem__(self, idx):
+        
+        i = self.id_success[idx]
+        input = torch.concatenate(
+            # current state, current contact, next contact reached (all in CURRENT base frame)
+            (self.state[i], self.target_contact[i], self.feet_contact[i])
+        ).unsqueeze(0)
+        
+        target = (self.target_contact[i]-self.next_feet_contact[i]).unsqueeze(0)
+        
+        # Add noise to the input data
+        if self.noise_std > 0:
+            input += torch.rand_like(input) * self.noise_std
+
+        item = {
+            "input": input,
+            "target": target
+        }
+        
+        return item
 
 class DatasetFactory():
     DATASETS = {
         "classifier": CollisionClassifierDataset,
         "regressor": StateEstimationDataset,
+        "offset": OffsetEstimationDataset,
     }
 
     @staticmethod

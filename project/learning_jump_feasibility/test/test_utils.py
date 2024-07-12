@@ -157,8 +157,14 @@ def compute_offsets(model : nn.Module,
 
     with torch.no_grad():
         out = model(input).squeeze()
-        
-    _, _, mpc_offset_pos_b = torch.split(out, [16, 6, 12], dim=-1)
+    
+    # print(out.shape)
+    if B == 1:
+        mpc_offset_pos_b = out[-12:]
+    else:
+    # print(out.shape)
+        _, _, mpc_offset_pos_b = torch.split(out, [16, 6, 12], dim=-1)
+    
 
     # Express mpc input offset in world frame, since it's a vector, no translation
     W_T_b.translation = np.zeros(3)
@@ -204,7 +210,7 @@ def is_feasible(classifier : nn.Module,
     with torch.no_grad():
         score = classifier(input).squeeze()
         
-    proba_success = torch.nn.functional.sigmoid(score).numpy()
+    proba_success = torch.nn.functional.sigmoid(score / 5).numpy()
     success = proba_success > threshold
     
     return success, proba_success

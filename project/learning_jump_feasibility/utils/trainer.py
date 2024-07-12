@@ -332,6 +332,8 @@ class TrainerSupervised(TrainerBase):
         """
         total_loss = 0.
 
+        use_norm_dist_loss = self.cfg.get_value("NormDistLoss")
+
         self.model.train()
         for batch in tqdm(self.dataloader_train, desc = "Batch", leave=False):
             input = batch.pop("input")
@@ -341,7 +343,15 @@ class TrainerSupervised(TrainerBase):
             target = target.to(self.device)
 
             out = self.model(input)
+
+            if use_norm_dist_loss:
+                norm_dist = batch.pop("norm_dist", None)
+                norm_dist = norm_dist.to(self.device)
+                norm_dist = norm_dist * self.cfg.get_value("NormAlpha")
+                out += norm_dist.unsqueeze(1)
+
             loss = self.criterion(out, target)
+
             loss.backward()
             self.optim.step()
             self.optim.zero_grad()

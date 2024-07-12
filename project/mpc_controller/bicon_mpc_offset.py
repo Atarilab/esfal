@@ -17,6 +17,7 @@ class BiconMPCOffset(BiConMPC):
     def __init__(self, robot: RobotWrapperAbstract, state_predictor_path : str, **kwargs) -> None:
         super().__init__(robot, **kwargs)
         self.state_predictor = load_model(state_predictor_path)
+        self.state_predictor.eval()
         self.consecutive_landing = 0
         self.waiting_for_next_jump = True
 

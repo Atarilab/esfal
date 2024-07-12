@@ -20,7 +20,8 @@ class MLP(nn.Module):
             'ELU': nn.ELU,
             'GELU': nn.GELU,
             'Mish': nn.Mish,
-            'SELU': nn.SELU
+            'SELU': nn.SELU,
+            'Linear': nn.Identity,
         }
 
         if activation not in activations:

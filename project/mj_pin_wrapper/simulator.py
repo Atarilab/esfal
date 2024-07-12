@@ -158,7 +158,8 @@ class Simulator(object):
             
             cam = mujoco.MjvCamera()
             mujoco.mjv_defaultCamera(cam)
-            cam.distance, cam.azimuth, cam.elevation = 1.5, -130, -20
+            cam.distance, cam.azimuth, cam.elevation = 1.35, -130, -20
+            cam.lookat[0], cam.lookat[1], cam.lookat[2] = 0.0, 0.0, 0.2
         
         if self.verbose:
             print("-----> Simulation start")

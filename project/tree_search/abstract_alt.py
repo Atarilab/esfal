@@ -7,25 +7,29 @@ from functools import wraps
 
 State = List[int]
 
-class Action:
-    def __init__(self) -> None:
-        self.visit = 0
-        self.value = 0.
+# class Action:
+#     def __init__(self) -> None:
+#         self.visit = 0
+#         self.value = 0.
 
-    def increment_visit(self) -> None:
-        self.visit += 1
+#     def increment_visit(self) -> None:
+#         self.visit += 1
 
-    def update_value(self, reward) -> None:
-        self.value += reward
+#     def update_value(self, reward) -> None:
+#         self.value += reward
 
 class Node:
     def __init__(self) -> None:
         self.visit = 0
-        self.actions = defaultdict(Action)             # { child state (hash): Action }
+        self.actions = set([])          # { child state (hash): Action }
         self.expanded = False
+        self.value = 0
         
     def increment_visit(self) -> None:
         self.visit += 1
+    
+    def update_value(self, reward) -> None:
+        self.value += reward
 
 class Tree:
     def __init__(self) -> None:
@@ -59,7 +63,7 @@ class Tree:
     def get_children(self, state : State) -> List[State]:
         h = self.hash_state(state)
         node = self.nodes[h]
-        return list(map(self.unhash_state, node.actions.keys()))
+        return list(map(self.unhash_state, list(node.actions)))
 
     def add_children_to_node(self, state : State, children_states : List[State]) -> None:
         h = self.hash_state(state)
@@ -72,36 +76,38 @@ class Tree:
                 self.nodes.update({h_child : Node() for h_child in h_children if not h_child in self.nodes.keys()})
                 
                 # Add actionhas_childrens and children to current state 
-                node.actions = {h_child : Action() for h_child in h_children}
+                node.actions = {h_child for h_child in h_children}
+                
+        else:
+            h_children = list(map(self.hash_state, children_states))
+            if len(h_children) > 0:
+                self.nodes.update({h_child : Node() for h_child in h_children if not h_child in self.nodes.keys()})
+                node.actions.update({h_child for h_child in h_children})
             
-    def update_value_visit_action(self, stateA : State, stateB : State, reward : float) -> None:
-        hA = self.hash_state(stateA)
-        hB = self.hash_state(stateB)
-
+    def update_value_visit(self, state : State, reward : float) -> None:
+        hA = self.hash_state(state)
         node = self.nodes[hA]
-        action = node.actions[hB]
 
         node.increment_visit()
-        action.increment_visit()
-        action.update_value(reward)
+        node.update_value(reward)
 
     def reset_search_path(self) -> None:
         self.current_search_path = []
     
-    def get_action(self, stateA : State, stateB : State) -> Action:
+    def get_action(self, stateA : State, stateB : State) -> State:
         hA = self.hash_state(stateA)
 
         if hA in self.nodes.keys():
             hB = self.hash_state(stateB)
-            if hB in self.nodes[hA].actions.keys():
-                return self.nodes[hA].actions[hB]
+            if hB in self.nodes[hA].actions:
+                return self.nodes[hB]
         return None
     
-    def get_actions(self, state : State) -> List[Action]:
+    def get_actions(self, state : State) -> List[State]:
         h = self.hash_state(state)
 
         if h in self.nodes.keys():
-            return list(self.nodes[h].actions.values())
+            return list(self.nodes[h].actions)
         return None
     
     def get_node(self, state : State) -> Node:
@@ -115,7 +121,7 @@ class Tree:
         hB = self.hash_state(stateB)
 
         node = self.nodes[hA]
-        action = node.actions[hB]
+        action = self.nodes[hB]
 
         if action.visit == 0:
             return float("+inf")
@@ -172,7 +178,7 @@ class MCTS():
         for k, v in optional_args.items(): setattr(self, k, v)
         
         self.timings = defaultdict(float)
-
+        
         self.statistics = {
             "num_iterations" : 0,
             "num_simulation_calls" : 0,
@@ -224,6 +230,7 @@ class MCTS():
 
             # Select one of the children that haven't been expanded if exists
             children = self.tree.get_children(state)
+            
             unexplored = list(filter(lambda state: not self.tree.expanded(state), children))
 
             if unexplored:
@@ -270,10 +277,8 @@ class MCTS():
     
     @timing("back_propagation")
     def back_propagation(self, reward : float) -> None:
-        child_state = self.tree.current_search_path[-1]
-        for state in reversed(self.tree.current_search_path[:-1]):
-            self.tree.update_value_visit_action(state, child_state, reward)
-            child_state = state
+        for state in reversed(self.tree.current_search_path):
+            self.tree.update_value_visit(state, reward)
     
     def search(self, state_start, state_goal, num_iterations:int=1000):
         
