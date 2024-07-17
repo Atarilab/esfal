@@ -21,10 +21,6 @@ class MCTSSteppingStonesKin(MCTS):
                  C: float = np.sqrt(2),
                  W: float = 10.,
                  alpha_exploration: float = 0.0,
-                 state_estimator_state_path: str = "",
-                 classifier_state_path: str = "",
-                 simulation: str = 'mpc', # 'mpc' or 'network'
-                 network_simulation_threshold: float = 0.525,
                  **kwargs,
                  ) -> None:
         
@@ -55,16 +51,6 @@ class MCTSSteppingStonesKin(MCTS):
         
         # Kinematics feasibility
         self.kinematics = QuadrupedKinematicFeasibility(self.sim.robot, num_threads=self.n_threads_kin)
-
-        #Estimate the state at next jump + input of MPC to reach that position
-        self.state_estimator = load_model(state_estimator_state_path)
-        self.state_estimator.eval()
-        # Classify if a jump dynamically feasible
-        self.classifier = load_model(classifier_state_path)
-        self.classifier.eval()
-        self.simulation_check = simulation
-        self.network_simulation_threshold = network_simulation_threshold
-        self.stepping_stone_radius = self.sim.stepping_stones.size[0]
             
     def _compute_max_dist(self, contact_pos_w) -> float:
         diffs = contact_pos_w[:, np.newaxis, :] - contact_pos_w[np.newaxis, :, :]
@@ -169,26 +155,19 @@ class MCTSSteppingStonesKin(MCTS):
             r = MCTSSteppingStonesKin.sigmoid(5 * (r - 1))
             return r, False, None
         
-        if self.simulation_check == 'mpc':
-            goal_reached = self.sim.run_contact_plan(contact_plan)
+        goal_reached = self.sim.run_contact_plan(contact_plan)
 
-            target_contacts = self.sim.stepping_stones.positions[contact_plan]
-            target_contacts = np.array(target_contacts)[:, :, :2]
-            achieved_contacts = self.sim.data_recorder.record_feet_contact
-            achieved_contacts = np.array(achieved_contacts)[:, :, :2]
+        target_contacts = self.sim.stepping_stones.positions[contact_plan]
+        target_contacts = np.array(target_contacts)[:, :, :2]
+        achieved_contacts = self.sim.data_recorder.record_feet_contact
+        achieved_contacts = np.array(achieved_contacts)[:, :, :2]
 
-            if goal_reached:
-                mean_contact_error = []
-                for target_contact, achieved_contact in zip(target_contacts, achieved_contacts):
-                    contact_error = np.linalg.norm(target_contact - achieved_contact, axis=-1).mean()
-                    mean_contact_error.append(contact_error)
-                mean_contact_error = np.mean(mean_contact_error)
-
-        elif self.simulation_check == 'network':
-            goal_reached = self.check_path_with_network(contact_plan)
-            mean_contact_error = 0.0
-        else:
-            raise ValueError("Invalid simulation check")
+        if goal_reached:
+            mean_contact_error = []
+            for target_contact, achieved_contact in zip(target_contacts, achieved_contacts):
+                contact_error = np.linalg.norm(target_contact - achieved_contact, axis=-1).mean()
+                mean_contact_error.append(contact_error)
+            mean_contact_error = np.mean(mean_contact_error)
         
         if goal_reached:
             return self.W, True, mean_contact_error
@@ -221,42 +200,6 @@ class MCTSSteppingStonesKin(MCTS):
         return reward, solution_found, contact_error
     
 
-    def check_path_with_network(self, contact_plan) -> bool:
-        """
-        Check if the contact plan is feasible with the network.
-        """
-        # print(contact_plan)
-        # raise NotImplementedError
-        
-        q, v = self.sim.robot.get_pin_state()
-        current_contact_id = contact_plan[0]
-        current_contact_w = self.sim.stepping_stones.positions[current_contact_id]
-        q, v, _ = predict_next_state(self.state_estimator, q, v, self.sim.robot, 
-                                                     current_contact_w, current_contact_w)
-        
-        for i in range(len(contact_plan) - 1):
-            current_contact_w = self.sim.stepping_stones.positions[contact_plan[i]]
-            # current_contact_w = current_contact_w.reshape(1, -1)
-            
-            target_contact_id = contact_plan[i + 1]
-            target_contact_w = self.sim.stepping_stones.positions[target_contact_id]
-            
-            current_contact_w = current_contact_w.reshape(1, -1)
-            target_contact_w = target_contact_w.reshape(1, -1)
-            
-            dyn_feasible, score = is_feasible(self.classifier, q, v, current_contact_w, target_contact_w, self.network_simulation_threshold)
-            # print(dyn_feasible, score, current_contact_id, target_contact_id)
-            if not dyn_feasible:
-                return False
-            
-            q, v, offset = predict_next_state(self.state_estimator, q, v, self.sim.robot, 
-                                                         current_contact_w.reshape(4, 3), target_contact_w.reshape(4, 3))
-
-            for i in range(4):
-                if np.linalg.norm(offset[i]) > self.stepping_stone_radius * 1.0:
-                    return False
-        return True
-
 class MCTSSteppingStonesDyn(MCTSSteppingStonesKin):
     def __init__(self,
                  stepping_stones_sim: SteppingStonesSimulator,
@@ -277,8 +220,6 @@ class MCTSSteppingStonesDyn(MCTSSteppingStonesKin):
                          C,
                          W,
                          alpha_exploration,
-                         state_estimator_state_path,
-                         classifier_state_path,
                          **kwargs)
         
         # Estimate the state at next jump + input of MPC to reach that position
@@ -378,6 +319,9 @@ class MCTSSteppingStonesDyn(MCTSSteppingStonesKin):
             states,
             goal_state)
 
+        # h_distance = 1 - h_distance / self.d_max
+        # h_distance = MCTSSteppingStonesKin.sigmoid(5 * (h_distance - 1))
+
         # TODO Batched version
         h_feasible = np.empty_like(h_distance)
         h_accuracy = np.empty_like(h_distance)
@@ -387,7 +331,7 @@ class MCTSSteppingStonesDyn(MCTSSteppingStonesKin):
             h_feasible[i] = self.node_score_dict.get(h_state, 0.)
             h_accuracy[i] = 1 / (self.delta_mpc.get(h_state, 1.) + 1e-12)
 
-        heuristic_values = h_distance + self.safety * h_feasible + self.accuracy * self.sig(h_accuracy)
+        heuristic_values = h_distance - self.safety * h_feasible - self.accuracy * self.sig(h_accuracy / 5)
         
         # Exploration
         if np.random.rand() < self.alpha_exploration:
@@ -396,6 +340,7 @@ class MCTSSteppingStonesDyn(MCTSSteppingStonesKin):
 
         # Exploitation
         else:
+            # id = np.argmax(heuristic_values)
             id = np.argmin(heuristic_values)
         
         state = states[id]
@@ -578,26 +523,20 @@ class MCTSSteppingStonesDyn(MCTSSteppingStonesKin):
 
             return r, False, None
         
-        if self.simulation_check == 'mpc':
-            goal_reached = self.sim.run_contact_plan(contact_plan)
 
-            target_contacts = self.sim.stepping_stones.positions[contact_plan]
-            target_contacts = np.array(target_contacts)[:, :, :2]
-            achieved_contacts = self.sim.data_recorder.record_feet_contact
-            achieved_contacts = np.array(achieved_contacts)[:, :, :2]
+        goal_reached = self.sim.run_contact_plan(contact_plan)
 
-            if goal_reached:
-                mean_contact_error = []
-                for target_contact, achieved_contact in zip(target_contacts, achieved_contacts):
-                    contact_error = np.linalg.norm(target_contact - achieved_contact, axis=-1).mean()
-                    mean_contact_error.append(contact_error)
-                mean_contact_error = np.mean(mean_contact_error)
+        target_contacts = self.sim.stepping_stones.positions[contact_plan]
+        target_contacts = np.array(target_contacts)[:, :, :2]
+        achieved_contacts = self.sim.data_recorder.record_feet_contact
+        achieved_contacts = np.array(achieved_contacts)[:, :, :2]
 
-        elif self.simulation_check == 'network':
-            goal_reached = self.check_path_with_network(contact_plan)
-            mean_contact_error = 0.0
-        else:
-            raise ValueError("Invalid simulation check")
+        if goal_reached:
+            mean_contact_error = []
+            for target_contact, achieved_contact in zip(target_contacts, achieved_contacts):
+                contact_error = np.linalg.norm(target_contact - achieved_contact, axis=-1).mean()
+                mean_contact_error.append(contact_error)
+            mean_contact_error = np.mean(mean_contact_error)
         
         if goal_reached:
             return self.W, True, mean_contact_error

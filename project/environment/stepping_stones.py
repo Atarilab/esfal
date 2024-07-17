@@ -9,6 +9,8 @@ class SteppingStonesEnv:
     DEFAULT_STONE_SHAPE = "box"               # box or cylinder
     DEFAULT_STONE_HEIGHT = 0.1                # m
     DEFAULT_STONE_RGBA = [0.2, 0.2, 0.25, 1.]  # [R, G, B, A]
+    DEFAULT_START_RGBA = [0.0, 0.6, 0.05, 1.]  # [R, G, B, A]
+    DEFAULT_GOAL_RGBA = [0.6, 0.0, 0.05, 1.]   # [R, G, B, A]
     
     def __init__(self,
                  grid_size: Tuple[int, int] = (9, 9),
@@ -16,6 +18,8 @@ class SteppingStonesEnv:
                  size_ratio: Tuple[float, float] = (0.6, 0.6),
                  randomize_pos_ratio: float = False,
                  randomize_height_ratio: float = 0.,
+                 start : list[int] = [],
+                 goal : list[int] = [],
                  **kwargs) -> None:
         """
         Define stepping stones locations on a grid. 
@@ -35,6 +39,10 @@ class SteppingStonesEnv:
         self.spacing = list(spacing)
         self.size_ratio = size_ratio
         self.randomize_height_ratio = randomize_height_ratio
+
+        # Start and goal
+        self.start = start
+        self.goal = goal
         
         # Optional args
         self.shape = None
@@ -43,6 +51,8 @@ class SteppingStonesEnv:
             "shape" : SteppingStonesEnv.DEFAULT_STONE_SHAPE,
             "height" : SteppingStonesEnv.DEFAULT_STONE_HEIGHT,
             "rgba" : SteppingStonesEnv.DEFAULT_STONE_RGBA,
+            "start_rgba" : SteppingStonesEnv.DEFAULT_START_RGBA,
+            "goal_rgba" : SteppingStonesEnv.DEFAULT_GOAL_RGBA,
         }
         optional_args.update(kwargs)
         for k, v in optional_args.items(): setattr(self, k, v)
@@ -130,16 +140,23 @@ class SteppingStonesEnv:
         """
         assert self.shape in ["box", "cylinder"], "Stepping stone shape should be 'box' or 'cylinder'"
         name = SteppingStonesEnv.DEFAULT_GEOM_NAME
+
+        if id in self.start:
+            rgba = self.start_rgba
+        elif id in self.goal:
+            rgba = self.goal_rgba
+        else:
+            rgba = self.rgba
         
         if self.shape == "box":
             size_x, size_y, size_z = self.size[id]/2., self.size[id]/2., self.positions[id, 2]/2.
-            r, g, b, a = self.rgba
+            r, g, b, a = rgba
             x, y, z = self.positions[id, 0], self.positions[id, 1], self.positions[id, 2]/2.
             string = f"""<geom type="box" name="{name}_{id}" size="{size_x:.3f} {size_y:.3f} {size_z:.3f}" pos="{x:.3f} {y:.3f} {z:.3f}" rgba="{r} {g} {b} {a}"/>"""
             
         elif self.shape == "cylinder":
             size_radius, size_length = self.size[id]/2., self.positions[id, 2]/2.
-            r, g, b, a = self.rgba
+            r, g, b, a = rgba
             x, y, z = self.positions[id, 0], self.positions[id, 1], self.positions[id, 2]/2.
             string = f"""
             <geom type="cylinder" name="{name}_{id}" size="{size_radius:.3f} {size_length:.3f}" pos="{x:.3f} {y:.3f} {z:.3f}" rgba="{r} {g} {b} {a}"/>"""

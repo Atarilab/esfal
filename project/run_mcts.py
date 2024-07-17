@@ -22,11 +22,12 @@ from utils.visuals import desired_contact_locations_callback
 from tree_search.mcts_stepping_stones import MCTSSteppingStonesKin, MCTSSteppingStonesDyn
 from learning_jump_feasibility.collect_data import RecordJumpData
 
-# REGRESSOR_PATH = f"/home/atari_ws/project/tree_search/trained_models/state_estimator/1/MLP.pth"
-# CLASSIFIER_PATH = f"/home/atari_ws/project/tree_search/trained_models/classifier/0/MLP.pth"
-REGRESSOR_PATH = "learning_jump_feasibility/logs/MLP_regressor/0/MLP.pth"
-CLASSIFIER_PATH = "learning_jump_feasibility/logs/MLPclassifierBinary/0/MLP.pth"
-OFFSET_PATH = "learning_jump_feasibility/logs/MLP_offset/1/MLP.pth"
+REGRESSOR_PATH = f"tree_search/trained_models/state_estimator/0/MLP.pth"
+CLASSIFIER_PATH = f"tree_search/trained_models/classifier/0/MLP.pth"
+OFFSET_PATH = f"tree_search/trained_models/offset/1/MLP.pth"
+# REGRESSOR_PATH = "learning_jump_feasibility/logs/MLP_regressor/0/MLP.pth"
+# CLASSIFIER_PATH = "learning_jump_feasibility/logs/MLPclassifierBinary/0/MLP.pth"
+# OFFSET_PATH = "learning_jump_feasibility/logs/MLP_offset/1/MLP.pth"
 
 
 class Go2Config:
@@ -49,19 +50,21 @@ if __name__ == "__main__":
     URDF_path,\
     xml_string,\
     package_dir = RobotModelLoader.get_paths(cfg.name, mesh_dir=cfg.mesh_dir)
+
+    start = [23, 9, 21, 7]
+    goal = [27, 13, 25, 11]
     
     ### Stepping stones env
     stepping_stones_height = 0.2
     stepping_stones = SteppingStonesEnv(
         grid_size=(7, 5),
         spacing=(0.18, 0.28/2),
-        size_ratio=(0.50, 0.50),
+        size_ratio=(0.60, 0.60),
         height=stepping_stones_height,
-        shape="cylinder"
+        shape="cylinder",
+        start=start,
+        goal=goal,
     )
-
-    start = [23, 9, 21, 7]
-    goal = [27, 13, 25, 11]
    
    # get current random state of numpy
     state = np.random.get_state()
@@ -108,11 +111,6 @@ if __name__ == "__main__":
             n_threads_kin=1,
             n_threads_sim=1,
             use_inverse_kinematics=False,
-            state_estimator_state_path=REGRESSOR_PATH,
-            classifier_state_path=CLASSIFIER_PATH,
-            # simulation='network',
-            # simulation='mpc',
-            # network_simulation_threshold=0.65
         )
         # Important to init the robot position
         simulator.set_start_and_goal(start_indices=start, goal_indices=goal)
@@ -130,8 +128,8 @@ if __name__ == "__main__":
             classifier_state_path=CLASSIFIER_PATH,
             max_solution_search=3,
             classifier_threshold=0.6,
-            safety=0.8,
-            accuracy=0.2,
+            safety=0.0,
+            accuracy=0.0,
             print_info=True,
         )
         # Important to init the robot position
@@ -143,22 +141,7 @@ if __name__ == "__main__":
         print(fn_name, timings)
     
     print(mcts.statistics)
-    # print(mcts.solutions)
-    
-    # test_solutions = []
-    # for solution in mcts.solutions:
-    #     goal_reached = simulator.run_contact_plan(
-    #         solution, 
-    #         use_viewer=False, 
-    #         record_video=False)
-        
-    #     test_solutions.append(goal_reached)
-    
-    # print(test_solutions)
-
-    # print()
-    # print(stepping_stones.positions[mcts.solutions[2]])
-    # print(data_recorder.record_feet_contact)
+    print(mcts.solutions)
 
     simulator.run_contact_plan(
         mcts.solutions[0], 

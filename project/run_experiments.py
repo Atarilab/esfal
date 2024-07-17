@@ -23,9 +23,12 @@ from tree_search.mcts_stepping_stones import MCTSSteppingStonesKin, MCTSStepping
 from learning_jump_feasibility.collect_data import RecordJumpData
 
 
-REGRESSOR_PATH = "learning_jump_feasibility/logs/MLP_regressor/0/MLP.pth"
-CLASSIFIER_PATH = "learning_jump_feasibility/logs/MLPclassifierBinary/0/MLP.pth"
-OFFSET_PATH = "learning_jump_feasibility/logs/MLP_offset/1/MLP.pth"
+REGRESSOR_PATH = f"tree_search/trained_models/state_estimator/0/MLP.pth"
+CLASSIFIER_PATH = f"tree_search/trained_models/classifier/0/MLP.pth"
+OFFSET_PATH = f"tree_search/trained_models/offset/1/MLP.pth"
+# REGRESSOR_PATH = "learning_jump_feasibility/logs/MLP_regressor/0/MLP.pth"
+# CLASSIFIER_PATH = "learning_jump_feasibility/logs/MLPclassifierBinary/0/MLP.pth"
+# OFFSET_PATH = "learning_jump_feasibility/logs/MLP_offset/1/MLP.pth"
 
 class Go2Config:
     name = "go2"
@@ -41,7 +44,6 @@ if __name__ == "__main__":
     parser.add_argument('--num_remove', type=int, default=9, help='Number of stones to remove')
     parser.add_argument("--pos_noise", type=float, default=0.0, help="Stepping stones position noise")
     parser.add_argument('--size_ratio', type=float, default=0.7, help='Size ratio of stones')
-    # parser.add_argument('--simulation', type=str, default="mpc", help='Which simulation to use (mpc or network)')
     parser.add_argument('--offset', type=bool, default=False, help='Use offset controller')
     parser.add_argument('--alpha', type=float, default=0.0, help='Alpha safety value')
     parser.add_argument('--beta', type=float, default=0.0, help='Beta accuracy value')
@@ -54,18 +56,10 @@ if __name__ == "__main__":
     
     num_episodes = 140
     num_repeat = 1
-    save_type = "folder" # "folder" or "file"
+
+    save_dir = f"/home/atari_ws/results/runs/run_{args.mode}_{'offset' if args.offset else ''}_{int(args.size_ratio*100)}_{int(args.alpha*100)}_{int(args.beta*100)}"
+    os.makedirs(save_dir, exist_ok=True)
     
-    if save_type == "folder":
-        save_dir = f"/home/akizhanov/esfal/results/runs_2/run_{args.mode}_{'offset' if args.offset else ''}_{int(args.size_ratio*100)}_{int(args.alpha*100)}_{int(args.beta*100)}"
-        os.makedirs(save_dir, exist_ok=True)
-    elif save_type == "file":
-        results = []
-        file_name = \
-        f"/home/akizhanov/esfal/results/search_run_{args.mode}_{'offset' if args.offset else ''}_{args.num_remove}_{int(args.pos_noise*100)}_{int(args.size_ratio*100)}.npz"
-    
-    # for id in episodes_with_solutions:
-    # for id in range(num_episodes):
     print(f"Count: {args.id}")
     if not os.path.exists(f"{save_dir}/{args.id}.npz"):
         id = args.id
@@ -88,7 +82,6 @@ if __name__ == "__main__":
             )
             start = [23, 9, 21, 7]
             goal = [27, 13, 25, 11]
-            # goal = [34, 20, 32, 18]
         
         # get current random state of numpy
             state = np.random.get_state()
@@ -141,10 +134,6 @@ if __name__ == "__main__":
                     n_threads_kin=1,
                     n_threads_sim=1,
                     use_inverse_kinematics=False,
-                    state_estimator_state_path=REGRESSOR_PATH,
-                    classifier_state_path=CLASSIFIER_PATH,
-                    # simulation=args.simulation,
-                    # network_simulation_threshold=0.65,
                 )
                 # Important to init the robot position
                 simulator.set_start_and_goal(start_indices=start, goal_indices=goal)
@@ -168,49 +157,17 @@ if __name__ == "__main__":
                 simulator.set_start_and_goal(start_indices=start, goal_indices=goal)
 
             mcts.search(start, goal, num_iterations=10000)
-            # test_solutions = []
-            
-            # if args.simulation == "network":
-            #     for solution in mcts.solutions:
-            #         goal_reached = simulator.run_contact_plan(
-            #             solution, 
-            #             use_viewer=False, 
-            #             record_video=False)
-            
-            #         test_solutions.append(goal_reached)
-                
-            #     print(test_solutions) 
                     
             print(mcts.statistics)
-            # print(mcts.solutions)
-            if save_type == "folder":
-                np.savez(f"{save_dir}/{args.id}.npz", {
-                    'statistics': mcts.statistics,
-                    'solutions': mcts.solutions,
-                    'id': id,
-                    'repeat': repeat,
-                    'mode': args.mode,
-                    # 'simulation': args.simulation, # 'mpc' or 'network
-                    'num_remove': args.num_remove,
-                    'pos_noise': args.pos_noise,
-                    'offset': args.offset,
-                    # 'test_solutions': test_solutions,
-                    'id_remove': stepping_stones.id_to_remove,
-                })
-            elif save_type == "file":
-                results.append({ 
-                    'statistics': mcts.statistics,
-                    'solutions': mcts.solutions,
-                    'id': id,
-                    'repeat': repeat,
-                    'mode': args.mode,
-                    # 'simulation': args.simulation, # 'mpc' or 'network
-                    'num_remove': args.num_remove,
-                    'pos_noise': args.pos_noise,
-                    'offset': args.offset,
-                    # 'test_solutions': test_solutions,
-                    'id_remove': stepping_stones.id_to_remove,
-                })
 
-    if save_type == "file":
-        np.savez(file_name, results)
+            np.savez(f"{save_dir}/{args.id}.npz", {
+                'statistics': mcts.statistics,
+                'solutions': mcts.solutions,
+                'id': id,
+                'repeat': repeat,
+                'mode': args.mode,
+                'num_remove': args.num_remove,
+                'pos_noise': args.pos_noise,
+                'offset': args.offset,
+                'id_remove': stepping_stones.id_to_remove,
+            })

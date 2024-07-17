@@ -1,6 +1,8 @@
-# BiConMP MuJoCo
+# Learning feasible transitions for efficient contact planning
 
-MuJoCo wrapper for BiConMP solver in a docker container.
+This repository is the code for the paper named "Learning feasible transitions for efficient contact planning". 
+
+![example_env](images/env_example.jpg)
 
 ---
 
@@ -42,10 +44,10 @@ The environment is set up automatically with [BiConMP](https://github.com/machin
 cd /home/atari_ws/project/
 
 # Collect train data
-python3 collect_data --saving_path /home/atari_ws/data/learning_jump_feasibility/train --N 10000 --cores 20
+python3 collect_data.py --saving_path /home/atari_ws/data/learning_jump_feasibility/train --N 10000 --cores 20
 
 # Collect test data
-python3 collect_data --saving_path /home/atari_ws/data/learning_jump_feasibility/test --N 1000 --cores 20
+python3 collect_data.py --saving_path /home/atari_ws/data/learning_jump_feasibility/test --N 1000 --cores 20
 ```
 
 - [`main.py`](project/learning_jump_feasibility/main.py) run train the models on the data. Model are saved in learning_jump_feasibility/logs
@@ -58,6 +60,20 @@ python3 main.py --train supervised --cfg ./config/classifierBinary.yml
 # Train regressor
 python3 main.py --train supervised --cfg ./config/regressorMLP.yml
 ```
+
+### Run Experiments
+
+ - [`run_experiments.py`](project/run_experiments.py) runs single experiment with specified parameters. To run experiments on various environments and algorithm changes, bash script is used.
+
+ ```python3
+ cd /home/atari_ws/project/
+
+ # run single experiment
+ python3 run_experiments.py --mode kin --num_remove 9 --pose_noise 0.75 --size_ratio 0.6 --id 0
+
+ # run multiple experiments
+ ./multiple_experiments.sh
+ ```
 
 
 

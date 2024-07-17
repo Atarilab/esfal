@@ -37,47 +37,31 @@ if __name__ == "__main__":
     
     ### Stepping stones env
     stepping_stones_height = 0.2
-
-    # stepping_stones = SteppingStonesEnv(
-    #     grid_size=(10, 3),
-    #     spacing=(0.18, 0.14),
-    #     size_ratio=(0.8, 0.8),
-    #     height=stepping_stones_height,
-    #     randomize_pos_ratio=0.,
-    #     randomize_size_ratio=[0.55, 0.55],
-    #     shape="cylinder"
-    # )
+    start = [23, 9, 21, 7]
+    goal = [27, 13, 25, 11]
 
     stepping_stones = SteppingStonesEnv(
         grid_size=(7, 5),
         spacing=(0.18, 0.28/2),
-        size_ratio=(0.7, 0.7),
+        size_ratio=(0.5, 0.5),
         height=stepping_stones_height,
-        randomize_pos_ratio=0.,
-        randomize_size_ratio=[0.55, 0.55],
-        shape="cylinder"
+        shape="cylinder",
+        start=start,
+        goal=goal,
     )
 
-    start = [23, 9, 21, 7]
-    goal = [27, 13, 25, 11]
-
     state = np.random.get_state()
-    np.random.seed(7)
+    np.random.seed(2)
     # randomize stones position
-    stepping_stones.randomize_center_location(0.0, keep=[start, goal])
 
     stepping_stones.remove_random(N_to_remove=9, keep=[start, goal])
+    stepping_stones.randomize_center_location(0.75, keep=[start, goal])
     print(stepping_stones.id_to_remove)
     # set the random state back to the original
     np.random.set_state(state)
     
     id_contacts_plan = np.array([
-        [23, 9, 21, 7],
-        [24, 3, 22, 14],
-        [25, 4, 16, 22],
-        [19, 5, 24, 16],
-        [27, 13, 25, 10],
-        [27, 13, 25, 11]
+        [23, 9, 21, 7], [24, 3, 29, 1], [25, 4, 23, 2], [33, 12, 24, 3], [27, 13, 25, 11]
     ])
 
     xml_string = stepping_stones.include_env(xml_string)
@@ -93,15 +77,15 @@ if __name__ == "__main__":
         )
     
     ### Controller
-    # MODEL_PATH = "/home/atari_ws/project/tree_search/trained_models/state_estimator/1/MLP.pth"
     # MODEL_PATH = "learning_jump_feasibility/logs/MLP_regressor/1/MLP.pth"
     MODEL_PATH = "learning_jump_feasibility/logs/MLP_offset/1/MLP.pth"
-    controller = BiconMPCOffset(robot, MODEL_PATH, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
-    # controller = BiConMPC(robot, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
+    # controller = BiconMPCOffset(robot, MODEL_PATH, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
+    controller = BiConMPC(robot, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
     controller.set_gait_params(jump)  # Choose between trot, jump and bound
 
     ### Simulator
     simulator = SteppingStonesSimulator(stepping_stones, robot, controller)
+    simulator.set_start_and_goal(start_indices=start, goal_indices=goal)
 
     visual_callback = (lambda viewer, step, q, v, data :
         desired_contact_locations_callback(viewer, step, q, v, data, controller)

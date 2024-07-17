@@ -21,8 +21,7 @@ from utils.visuals import desired_contact_locations_callback, position_3d_callba
 from robots.configs import Go2Config
 from tree_search.kinematics import QuadrupedKinematicFeasibility
 
-# DEFAULT_PATH = "/home/atari_ws/data/learning_jump_feasibility"
-DEFAULT_PATH = "/home/akizhanov/esfal/data/learning_jump_feasibility"
+DEFAULT_PATH = "/home/atari_ws/data/learning_jump_feasibility"
 V = .08
 SCALE_NOISE = 0.12
 # SCALE_NOISE = 0.01
@@ -343,26 +342,26 @@ if __name__ == "__main__":
         
     else:
     
-        # def multiprocess_record_data(saving_path, seed, queue, lock) -> None:
-        #     r = copy.copy(robot)
-        #     record_data(r, saving_path, seed, queue, lock)
+        def multiprocess_record_data(saving_path, seed, queue, lock) -> None:
+            r = copy.copy(robot)
+            record_data(r, saving_path, seed, queue, lock)
         
-        # manager = Manager()
-        # lock = manager.Lock()
-        # queue = manager.Queue()
-        # seeds = np.random.randint(0, 2**32 - 1, size=args.N)
+        manager = Manager()
+        lock = manager.Lock()
+        queue = manager.Queue()
+        seeds = np.random.randint(0, 2**32 - 1, size=args.N)
 
-        # tasks = [(args.saving_path, seed, queue, lock) for seed in seeds]
+        tasks = [(args.saving_path, seed, queue, lock) for seed in seeds]
         
-        # def worker(args):
-        #     saving_path, seed, queue, lock = args
-        #     multiprocess_record_data(saving_path, seed, queue, lock)
+        def worker(args):
+            saving_path, seed, queue, lock = args
+            multiprocess_record_data(saving_path, seed, queue, lock)
 
-        # # Use multiprocessing Pool to run record_data in parallel
-        # with Pool(processes=args.cores) as pool:
-        #     # Wrap the pool.map with tqdm to display the progress bar
-        #     for _ in tqdm(pool.imap_unordered(worker, tasks), total=args.N):
-        #         queue.get()
+        # Use multiprocessing Pool to run record_data in parallel
+        with Pool(processes=args.cores) as pool:
+            # Wrap the pool.map with tqdm to display the progress bar
+            for _ in tqdm(pool.imap_unordered(worker, tasks), total=args.N):
+                queue.get()
 
-        for _ in tqdm(range(args.N)):
-            record_data(robot, args.saving_path, seed=np.random.randint(0, 2**32 - 1))
+        # for _ in tqdm(range(args.N)):
+        #     record_data(robot, args.saving_path, seed=np.random.randint(0, 2**32 - 1))

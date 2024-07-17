@@ -4,9 +4,8 @@ DATA: # arguments that will be passed to get_dataloaders
   binary: True
   noise_std: 1.0e-4
   # noise_std: 0.0
-  exclude: "pos"
-  # data_path: "/home/atari_ws/data/learning_jump_feasibility"
-  data_path: "/home/akizhanov/esfal/data/learning_jump_feasibility"
+  exclude: "pos_vj"
+  data_path: "/home/atari_ws/data/learning_jump_feasibility"
 
 MODEL:
   model_name: MLP
@@ -22,9 +21,6 @@ MODEL:
 TRAINING: # arguments that will be passed to the trainer
   criterion_str: BCEWithLogitsLoss
     # PARAMS:
-
-  NormDistLoss: False
-  NormAlpha: 5.0
       
   optimizer:
     optimizer_name: Adam
