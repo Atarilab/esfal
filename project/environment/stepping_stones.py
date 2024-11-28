@@ -114,6 +114,18 @@ class SteppingStonesEnv:
 
         self.positions[:, 0] += dx
         self.positions[:, 1] += dy
+
+    def randomize_height(self, randomize_height_ratio: float = 0.0, keep: list[int]=[]) -> None:
+        """
+        Randomize the height of the stepping stones.
+        
+        Args:
+            randomize_height_ratio (float): Ratio of the height to randomize.
+            keep (list[int]): id of the stepping stones to keep
+        """
+        self.positions[:, 2] += (np.random.rand(self.N) - 0.5) * 2 * randomize_height_ratio
+        self.positions[keep, 2] = self.height
+
         
     def remove_random(self, N_to_remove: int, keep: list[int] = []) -> None:
         """

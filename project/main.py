@@ -38,14 +38,15 @@ if __name__ == "__main__":
     ### Stepping stones env
     stepping_stones_height = 0.2
     start = [23, 9, 21, 7]
-    goal = [27, 13, 25, 11]
+    # goal = [27, 13, 25, 11]
+    goal = [25, 11, 23, 9]
 
     stepping_stones = SteppingStonesEnv(
         grid_size=(7, 5),
         spacing=(0.18, 0.28/2),
         size_ratio=(0.5, 0.5),
         height=stepping_stones_height,
-        shape="cylinder",
+        shape="box",
         start=start,
         goal=goal,
     )
@@ -54,14 +55,17 @@ if __name__ == "__main__":
     np.random.seed(2)
     # randomize stones position
 
-    stepping_stones.remove_random(N_to_remove=9, keep=[start, goal])
-    stepping_stones.randomize_center_location(0.75, keep=[start, goal])
+    # stepping_stones.remove_random(N_to_remove=9, keep=[start, goal])
+    # stepping_stones.randomize_center_location(0.75, keep=[start, goal])
+    # stepping_stones.randomize_height(0.02, keep=[start, goal])
     print(stepping_stones.id_to_remove)
     # set the random state back to the original
     np.random.set_state(state)
     
     id_contacts_plan = np.array([
-        [23, 9, 21, 7], [24, 3, 29, 1], [25, 4, 23, 2], [33, 12, 24, 3], [27, 13, 25, 11]
+        [23, 9, 21, 7], [24, 10, 22, 8], [25, 11, 23, 9], [25, 11, 23, 9]
+        # [23, 9, 21, 7], [17, 10, 29, 1], [25, 4, 23, 9], [33, 12, 24, 10], [27, 13, 25, 11]
+        # [23, 9, 21, 7], [24, 3, 29, 1], [25, 4, 23, 2], [33, 12, 24, 3], [27, 13, 25, 11]
     ])
 
     xml_string = stepping_stones.include_env(xml_string)
@@ -78,10 +82,11 @@ if __name__ == "__main__":
     
     ### Controller
     # MODEL_PATH = "learning_jump_feasibility/logs/MLP_regressor/1/MLP.pth"
-    MODEL_PATH = "learning_jump_feasibility/logs/MLP_offset/1/MLP.pth"
-    # controller = BiconMPCOffset(robot, MODEL_PATH, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
-    controller = BiConMPC(robot, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
-    controller.set_gait_params(jump)  # Choose between trot, jump and bound
+    MODEL_PATH = "learning_jump_feasibility/logs/MLP_offset/0/MLP.pth"
+    # MODEL_PATH = "tree_search/trained_models/offset/1/MLP.pth"
+    controller = BiconMPCOffset(robot, MODEL_PATH, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
+    # controller = BiConMPC(robot, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
+    controller.set_gait_params(trot)  # Choose between trot, jump and bound
 
     ### Simulator
     simulator = SteppingStonesSimulator(stepping_stones, robot, controller)
@@ -100,7 +105,7 @@ if __name__ == "__main__":
         record_video=True,
         fps=30,
         video_save_path="test.mp4",
-        playback_speed=0.5,
+        playback_speed=0.25,
         frame_height=1080, frame_width=1920,
         )
     

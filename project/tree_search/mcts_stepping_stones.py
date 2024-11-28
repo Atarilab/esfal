@@ -155,6 +155,7 @@ class MCTSSteppingStonesKin(MCTS):
             r = MCTSSteppingStonesKin.sigmoid(5 * (r - 1))
             return r, False, None
         
+        # print(contact_plan)
         goal_reached = self.sim.run_contact_plan(contact_plan)
 
         target_contacts = self.sim.stepping_stones.positions[contact_plan]
@@ -331,7 +332,10 @@ class MCTSSteppingStonesDyn(MCTSSteppingStonesKin):
             h_feasible[i] = self.node_score_dict.get(h_state, 0.)
             h_accuracy[i] = 1 / (self.delta_mpc.get(h_state, 1.) + 1e-12)
 
-        heuristic_values = h_distance - self.safety * h_feasible - self.accuracy * self.sig(h_accuracy / 5)
+        heuristic_values = h_distance - self.safety * h_feasible - self.accuracy * self.sig(h_accuracy / 1)
+
+        # normalization
+        heuristic_values = heuristic_values / (1 - self.safety - self.accuracy)
         
         # Exploration
         if np.random.rand() < self.alpha_exploration:
@@ -523,7 +527,8 @@ class MCTSSteppingStonesDyn(MCTSSteppingStonesKin):
 
             return r, False, None
         
-
+        # print(contact_plan)
+        # raise ValueError("Goal reached")
         goal_reached = self.sim.run_contact_plan(contact_plan)
 
         target_contacts = self.sim.stepping_stones.positions[contact_plan]

@@ -1,5 +1,6 @@
 import copy
 import time
+import datetime
 import pinocchio as pin
 from multiprocessing import Manager, Pool, Queue
 import argparse
@@ -11,6 +12,7 @@ from mujoco._structs import MjData
 from numpy.core.multiarray import array as array
 
 from mpc_controller.motions.cyclic.go2_jump import jump
+from mpc_controller.motions.cyclic.go2_trot import trot
 from mj_pin_wrapper.sim_env.utils import RobotModelLoader
 from mj_pin_wrapper.abstract.robot import QuadrupedWrapperAbstract
 from mj_pin_wrapper.simulator import Simulator
@@ -23,7 +25,8 @@ from tree_search.kinematics import QuadrupedKinematicFeasibility
 
 DEFAULT_PATH = "/home/atari_ws/data/learning_jump_feasibility"
 V = .08
-SCALE_NOISE = 0.12
+# SCALE_NOISE = 0.12
+SCALE_NOISE = 0.075
 # SCALE_NOISE = 0.01
 CHANGE_DIR_STEP = 2
 LENGTH = 100
@@ -31,7 +34,7 @@ LENGTH = 100
 ### Data recorder
 class RecordJumpData(DataRecorderAbstract):
     MIN_STEP_IN_CONTACT = 175 # ms
-    FILE_NAME = "data.npz"
+    FILE_NAME = "data/"
     STATE_NAME = "state"
     CONTACT_NAME = "contact"
     TARGET_NAME = "target"
@@ -55,6 +58,8 @@ class RecordJumpData(DataRecorderAbstract):
         self.record_target_contact = []
         # [knee_FL, knee_FR, knee_RL, knee_RR, other] 1 if collision, 0 otherwise
         self.record_collision = []
+
+        self.half_gait = False
                     
     def reset(self) -> None:
         self.consecutive_landing = 0
@@ -64,6 +69,8 @@ class RecordJumpData(DataRecorderAbstract):
         self.record_feet_contact = []
         self.record_target_contact = []
         self.record_collision = []
+
+        self.half_gait = False
 
     def update_contact_plan(self, contact_plan) -> None:
         self.contact_plan = contact_plan
@@ -156,8 +163,18 @@ class RecordJumpData(DataRecorderAbstract):
     def record(self, q: np.array, v: np.array, robot_data: MjData) -> None:
         self._update_consecutive_landing()
 
+        # jump_i_ = int((robot_data.time + 0.5*trot.gait_period) // (trot.gait_period))
+        # jump_i_ = int((robot_data.time + 0.5*jump.gait_period) // (jump.gait_period))
+        # if jump_i_ != self.i_jump:
+        #     self.i_jump = jump_i_
+
         if (self.consecutive_landing > RecordJumpData.MIN_STEP_IN_CONTACT and
             self.waiting_for_next_jump):
+
+        #     if self.half_gait:
+        #         self.half_gait = False
+        #         self.waiting_for_next_jump = False
+        #         return
             
             # State
             current_state = np.concatenate((q, v), axis=0)
@@ -169,6 +186,7 @@ class RecordJumpData(DataRecorderAbstract):
             
             # Target
             self.i_jump = int((robot_data.time + jump.gait_horizon / 2) // (jump.gait_horizon / 2))
+            # self.i_jump = int((robot_data.time + 0.5*trot.gait_period) // (trot.gait_period))
             if self.i_jump > len(self.contact_plan) - 1:
                 target_location_w = np.array(self.contact_plan[-1])
             else:
@@ -179,6 +197,7 @@ class RecordJumpData(DataRecorderAbstract):
             self.record_collision.append(np.zeros(5, dtype=np.int8)) # 0 When no collision
             
             self.waiting_for_next_jump = False
+            self.half_gait = True
     
     def _append_and_save(self, skip_first, skip_last):
         # if len(self.record_state) - skip_first - skip_last > 0:
@@ -192,17 +211,17 @@ class RecordJumpData(DataRecorderAbstract):
             self.record_collision = self.record_collision[skip_first:N-skip_last]
             
             # Load data if exists
-            if os.path.exists(self.saving_file_path):
-                data = np.load(self.saving_file_path)
-                record_state = data[RecordJumpData.STATE_NAME]
-                record_feet_contact = data[RecordJumpData.CONTACT_NAME]
-                record_target_contact = data[RecordJumpData.TARGET_NAME]
-                record_collision = data[RecordJumpData.COLLISION_NAME]
+            # if os.path.exists(self.saving_file_path):
+            #     data = np.load(self.saving_file_path)
+            #     record_state = data[RecordJumpData.STATE_NAME]
+            #     record_feet_contact = data[RecordJumpData.CONTACT_NAME]
+            #     record_target_contact = data[RecordJumpData.TARGET_NAME]
+            #     record_collision = data[RecordJumpData.COLLISION_NAME]
                 
-                self.record_state = np.concatenate((record_state, self.record_state), axis=0)
-                self.record_feet_contact = np.concatenate((record_feet_contact, self.record_feet_contact), axis=0)
-                self.record_target_contact = np.concatenate((record_target_contact, self.record_target_contact), axis=0)
-                self.record_collision = np.concatenate((record_collision, self.record_collision), axis=0)
+            #     self.record_state = np.concatenate((record_state, self.record_state), axis=0)
+            #     self.record_feet_contact = np.concatenate((record_feet_contact, self.record_feet_contact), axis=0)
+            #     self.record_target_contact = np.concatenate((record_target_contact, self.record_target_contact), axis=0)
+            #     self.record_collision = np.concatenate((record_collision, self.record_collision), axis=0)
             
             # Save with new data
             d = {
@@ -211,8 +230,9 @@ class RecordJumpData(DataRecorderAbstract):
                 RecordJumpData.TARGET_NAME : self.record_target_contact,
                 RecordJumpData.COLLISION_NAME : self.record_collision,
             }
-            
-            np.savez(self.saving_file_path, **d)
+            file_name = self.saving_file_path + "/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S%f") + ".npz"
+
+            np.savez(file_name, **d)
     
     def save(self, skip_first : int = 0, skip_last : int = 0, lock = None) -> None:
         if lock:
@@ -234,22 +254,15 @@ def create_random_walk_contact_plan(current_feet_pos : np.ndarray,
     moving_offset = np.zeros_like(current_feet_pos)
     N_eeff = current_feet_pos.shape[0]
     for i in range(length):
-        
-        # Randomized next position
-        # if i % change_dir_step == 0:
-        #     # dir_x, dir_y = np.tile(np.random.randint(-1, 2), 4), np.tile(np.random.randint(-1, 2), 4)
-        #     dir_x, dir_y = np.tile(1.0, 4), np.tile(0.0, 4)
-        #     #dir_x, dir_y = np.random.randint(-1, 2, size=(N_eeff)), np.random.randint(-1, 2, size=(N_eeff))
 
 
-        dir_x = np.random.uniform(-0.01, 0.4)
-        dir_y = np.random.uniform(-0.3, 0.3)
+        # dir_x = np.random.uniform(-0.01, 0.4)
+        # dir_y = np.random.uniform(-0.15, 0.15)
+        dir_x = np.random.uniform(-0.01, 0.3)
+        dir_y = np.random.uniform(-0.15, 0.15)
         dir_x, dir_y = np.tile(dir_x, 4), np.tile(dir_y, 4)
         offset = np.array([dir_x, dir_y, np.zeros(N_eeff)]).T
-        # offset_x = np.random.choice([-0.18, 0, 0.18], 4, p=[0.1, 0.4, 0.5])
-        # offset_y = np.random.choice([-0.14, 0, 0.14], 4, p=[0.2, 0.6, 0.2])
 
-        # offset = np.stack([offset_x, offset_y, np.zeros(N_eeff)], axis=-1)
 
         moving_offset += offset
         # moving_offset = np.mean(contact_plan[-1], axis=0)
@@ -258,7 +271,7 @@ def create_random_walk_contact_plan(current_feet_pos : np.ndarray,
         # Append to contact plan
         # next_contact = contact_plan[-1] + offset
         next_contact = current_feet_pos + moving_offset
-        next_contact[:, :2] += np.random.randn(4, 2) * scale_noise
+        next_contact[:, :2] += np.random.randn(4, 2) * 0.09
         contact_plan.append(next_contact.tolist())
         
     return contact_plan
@@ -278,8 +291,10 @@ def record_data(robot_source: QuadrupedWrapperAbstract,
     jump_recorder = RecordJumpData(robot, contact_plan, saving_path)
 
     ### Controller
+    motion_params = trot
+
     controller = BiConMPC(robot, replanning_time=0.05, sim_opt_lag=False)
-    controller.set_gait_params(jump)  # Choose between trot, jump and bound
+    controller.set_gait_params(motion_params)  # Choose between trot, jump and bound
     controller.set_contact_plan(copy.deepcopy(contact_plan))
 
     ### Simulator
@@ -290,8 +305,8 @@ def record_data(robot_source: QuadrupedWrapperAbstract,
     
     if saving_path == "":
         def visual_callback(viewer, step, q, v, data) : 
-            i = int(data.time // (jump.gait_horizon / 2))
-            i_next = int((data.time + jump.gait_horizon / 2) // (jump.gait_horizon / 2))
+            i = int((data.time + 0.5*motion_params.gait_period) // (motion_params.gait_period))
+            i_next = int((data.time + 1.5*motion_params.gait_period) // (motion_params.gait_period))
             current_target = contact_plan[i]
             next_target = contact_plan[i_next]
             
@@ -338,7 +353,7 @@ if __name__ == "__main__":
     )
     
     if args.test:
-        record_data(robot, "")
+        record_data(robot, "", seed=np.random.randint(0, 2**32 - 1))
         
     else:
     

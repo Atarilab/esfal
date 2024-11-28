@@ -32,21 +32,41 @@ class CollisionClassifierDataset(Dataset):
                  use_height: bool = False,
                  noise_std : float = 0.):
         
-        data = np.load(data_path)
+        # data = np=.load(data_path)
+        data_list = os.listdir(data_path)
+        self.state = []
+        self.feet_contact = []
+        self.target_contact = []
+        self.collision = []
+
+        for data_file in data_list:
+            data = np.load(os.path.join(data_path, data_file))
+
+            self.state.extend(data["state"])
+            self.feet_contact.extend(data["contact"])
+            self.target_contact.extend(data["target"])
+            self.collision.extend(data["collision"])
+
+        self.state = np.array(self.state)
+        self.feet_contact = np.array(self.feet_contact)
+        self.target_contact = np.array(self.target_contact)
+        self.collision = np.array(self.collision)
+            
+
         self.exclude = exclude
         self.binary = binary
         self.use_height = use_height
         self.noise_std = noise_std
         
         # State when robots lands [x, y, z, quat, v, w, qj, vj]
-        self.state = data["state"]
+        # self.state = data["state"]
         # Contact positions where robots land [4, 3]
-        self.feet_contact = data["contact"]
+        # self.feet_contact = data["contact"]
         self.next_feet_contact = np.empty_like(self.feet_contact)
         # Next target positions [4, 3]
-        self.target_contact = data["target"]
+        # self.target_contact = data["target"]
         # Current jump collision state [5] (collision [FL_knee, FR_knee, RL_knee, RR_knee, other])
-        self.collision = data["collision"]
+        # self.collision = data["collision"]
         
         
         collision_sum = np.sum(self.collision, axis=-1)
@@ -134,12 +154,45 @@ class StateEstimationDataset(Dataset):
         self.use_height = use_height
         self.noise_std = noise_std
 
-        data = np.load(data_path)
-        self.state = data["state"]
-        self.feet_contact = data["contact"]
+        # data = np.load(data_path)
+
+        data_list = os.listdir(data_path)
+        self.state = []
+        self.feet_contact = []
+        self.target_contact = []
+        self.collision = []
+
+        for data_file in data_list:
+            data = np.load(os.path.join(data_path, data_file))
+
+            self.state.extend(data["state"])
+            self.feet_contact.extend(data["contact"])
+            self.target_contact.extend(data["target"])
+            self.collision.extend(data["collision"])
+
+        self.state = np.array(self.state)
+        self.feet_contact = np.array(self.feet_contact)
+        self.target_contact = np.array(self.target_contact)
+        collision = np.array(self.collision)
+            
+        
+        # State when robots lands [x, y, z, quat, v, w, qj, vj]
+        # self.state = data["state"]
+        # Contact positions where robots land [4, 3]
+        # self.feet_contact = data["contact"]
         self.next_feet_contact = np.empty_like(self.feet_contact)
-        self.target_contact = data["target"]
-        collision = data["collision"]
+        # Next target positions [4, 3]
+        # self.target_contact = data["target"]
+        # Current jump collision state [5] (collision [FL_knee, FR_knee, RL_knee, RR_knee, other])
+        # self.collision = data["collision"]
+
+        ###
+
+        # self.state = data["state"]
+        # self.feet_contact = data["contact"]
+        # self.next_feet_contact = np.empty_like(self.feet_contact)
+        # self.target_contact = data["target"]
+        # collision = data["collision"]
 
         # Filter out the samples with collisions
         collision_sum = np.sum(collision, axis=-1)
@@ -213,12 +266,39 @@ class OffsetEstimationDataset(Dataset):
         self.use_height = use_height
         self.noise_std = noise_std
 
-        data = np.load(data_path)
-        self.state = data["state"]
-        self.feet_contact = data["contact"]
+        # data = np.load(data_path)
+
+        data_list = os.listdir(data_path)
+        self.state = []
+        self.feet_contact = []
+        self.target_contact = []
+        self.collision = []
+
+        for data_file in data_list:
+            data = np.load(os.path.join(data_path, data_file))
+
+            self.state.extend(data["state"])
+            self.feet_contact.extend(data["contact"])
+            self.target_contact.extend(data["target"])
+            self.collision.extend(data["collision"])
+
+        self.state = np.array(self.state)
+        self.feet_contact = np.array(self.feet_contact)
+        self.target_contact = np.array(self.target_contact)
+        collision = np.array(self.collision)
+            
+
+        # State when robots lands [x, y, z, quat, v, w, qj, vj]
+        # self.state = data["state"]
+        # Contact positions where robots land [4, 3]
+        # self.feet_contact = data["contact"]
         self.next_feet_contact = np.empty_like(self.feet_contact)
-        self.target_contact = data["target"]
-        collision = data["collision"]
+        # Next target positions [4, 3]
+        # self.target_contact = data["target"]
+        # Current jump collision state [5] (collision [FL_knee, FR_knee, RL_knee, RR_knee, other])
+        # self.collision = data["collision"]
+
+        ###
 
         # Filter out the samples with collisions
         collision_sum = np.sum(collision, axis=-1)
@@ -299,8 +379,8 @@ def get_dataloaders(name : str, batch_size : int, **kwargs):
     data_path = kwargs.get("data_path", "")
     assert data_path != "", "data_path argument not specified"
     
-    train_data_path = os.path.join(data_path, "train", "data.npz")
-    test_data_path = os.path.join(data_path, "test", "data.npz")
+    train_data_path = os.path.join(data_path, "train", "data")
+    test_data_path = os.path.join(data_path, "test", "data")
     
     train_dataset, test_dataset = None, None
     if os.path.exists(train_data_path):

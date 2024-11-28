@@ -25,9 +25,11 @@ from learning_jump_feasibility.collect_data import RecordJumpData
 REGRESSOR_PATH = f"tree_search/trained_models/state_estimator/0/MLP.pth"
 CLASSIFIER_PATH = f"tree_search/trained_models/classifier/0/MLP.pth"
 OFFSET_PATH = f"tree_search/trained_models/offset/1/MLP.pth"
+
+
 # REGRESSOR_PATH = "learning_jump_feasibility/logs/MLP_regressor/0/MLP.pth"
 # CLASSIFIER_PATH = "learning_jump_feasibility/logs/MLPclassifierBinary/0/MLP.pth"
-# OFFSET_PATH = "learning_jump_feasibility/logs/MLP_offset/1/MLP.pth"
+# OFFSET_PATH = "learning_jump_feasibility/logs/MLP_offset/0/MLP.pth"
 
 
 class Go2Config:
@@ -59,21 +61,22 @@ if __name__ == "__main__":
     stepping_stones = SteppingStonesEnv(
         grid_size=(7, 5),
         spacing=(0.18, 0.28/2),
-        size_ratio=(0.60, 0.60),
+        size_ratio=(0.5, 0.5),
         height=stepping_stones_height,
-        shape="cylinder",
+        shape="box",
         start=start,
         goal=goal,
     )
    
    # get current random state of numpy
     state = np.random.get_state()
-    np.random.seed(1)
+    np.random.seed(11)
     # randomize stones position
     stepping_stones.remove_random(N_to_remove=9, keep=[start, goal])
     stepping_stones.randomize_center_location(0.75, keep=[start, goal])
+    stepping_stones.randomize_height(0.02, keep=[start, goal])
     print(stepping_stones.id_to_remove)
-    # set the random state back to the original
+    # set the random state back to the original 
     np.random.set_state(state)
     
     xml_string = stepping_stones.include_env(xml_string)
@@ -106,7 +109,7 @@ if __name__ == "__main__":
             alpha_exploration=0.0,
             C=0.01,
             W=5.,
-            max_solution_search=3,
+            max_solution_search=1,
             print_info=True,
             n_threads_kin=1,
             n_threads_sim=1,
@@ -126,8 +129,8 @@ if __name__ == "__main__":
             W=5.,
             state_estimator_state_path=REGRESSOR_PATH,
             classifier_state_path=CLASSIFIER_PATH,
-            max_solution_search=3,
-            classifier_threshold=0.6,
+            max_solution_search=1,
+            classifier_threshold=0.65,
             safety=0.0,
             accuracy=0.0,
             print_info=True,
@@ -135,7 +138,7 @@ if __name__ == "__main__":
         # Important to init the robot position
         simulator.set_start_and_goal(start_indices=start, goal_indices=goal)
 
-    mcts.search(start, goal, num_iterations=10000)
+    mcts.search(start, goal, num_iterations=20000)
     
     for fn_name, timings in mcts.get_timings().items():
         print(fn_name, timings)

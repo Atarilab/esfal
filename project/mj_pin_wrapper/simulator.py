@@ -108,6 +108,10 @@ class Simulator(object):
             if self.verbose: print("/!\ Controller diverged")
             return True
         
+        # if self.controller.achieved:
+        #     if self.verbose: print("/!\ Controller achieved")
+        #     return True
+        
         return False
         
     def run(self,
@@ -148,6 +152,8 @@ class Simulator(object):
             frame_width = kwargs.get("frame_width", 1920)
             
             renderer = mujoco.Renderer(self.robot.mj_model, height=frame_height, width=frame_width)
+            # renderer.enable_depth_rendering()
+
             frames_count = 0
             VideoWriter = cv2.VideoWriter(
                 video_save_path,
@@ -158,6 +164,7 @@ class Simulator(object):
             
             cam = mujoco.MjvCamera()
             mujoco.mjv_defaultCamera(cam)
+
             cam.distance, cam.azimuth, cam.elevation = 1.35, -130, -20
             cam.lookat[0], cam.lookat[1], cam.lookat[2] = 0.0, 0.0, 0.2
         
@@ -198,9 +205,12 @@ class Simulator(object):
                     renderer.update_scene(self.robot.mj_data, cam)
                     frames_count += 1
                     image = renderer.render()
-                    # print(image.shape)
+
                     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
                     VideoWriter.write(image)
+
+                # if time.time() - sim_start_time > 6:
+                #     break
                 
                 if self._stop_sim():
                     break

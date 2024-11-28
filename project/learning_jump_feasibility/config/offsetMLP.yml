@@ -3,7 +3,7 @@ DATA: # arguments that will be passed to get_dataloaders
   batch_size: 1024
   noise_std: 1.0e-4
   exclude: "pos_vj"
-  data_path: "/home/atari_ws/data/learning_jump_feasibility"
+  data_path: "/home/akizhanov/esfal/data/learning_jump_feasibility"
 
 MODEL:
   model_name: MLP

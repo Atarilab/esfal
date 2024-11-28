@@ -26,9 +26,10 @@ from learning_jump_feasibility.collect_data import RecordJumpData
 REGRESSOR_PATH = f"tree_search/trained_models/state_estimator/0/MLP.pth"
 CLASSIFIER_PATH = f"tree_search/trained_models/classifier/0/MLP.pth"
 OFFSET_PATH = f"tree_search/trained_models/offset/1/MLP.pth"
+
 # REGRESSOR_PATH = "learning_jump_feasibility/logs/MLP_regressor/0/MLP.pth"
 # CLASSIFIER_PATH = "learning_jump_feasibility/logs/MLPclassifierBinary/0/MLP.pth"
-# OFFSET_PATH = "learning_jump_feasibility/logs/MLP_offset/1/MLP.pth"
+# OFFSET_PATH = "learning_jump_feasibility/logs/MLP_offset/0/MLP.pth"
 
 class Go2Config:
     name = "go2"
@@ -41,8 +42,8 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Argument parser for simulation parameters.")
     parser.add_argument('--mode', type=str, default="dyn", help='Which MCTS to use (kin or dyn)')
-    parser.add_argument('--num_remove', type=int, default=9, help='Number of stones to remove')
-    parser.add_argument("--pos_noise", type=float, default=0.0, help="Stepping stones position noise")
+    # parser.add_argument('--num_remove', type=int, default=9, help='Number of stones to remove')
+    # parser.add_argument("--pos_noise", type=float, default=0.0, help="Stepping stones position noise")
     parser.add_argument('--size_ratio', type=float, default=0.7, help='Size ratio of stones')
     parser.add_argument('--offset', type=bool, default=False, help='Use offset controller')
     parser.add_argument('--alpha', type=float, default=0.0, help='Alpha safety value')
@@ -54,10 +55,11 @@ if __name__ == "__main__":
     
     cfg = Go2Config
     
-    num_episodes = 140
+    # num_episodes = 140
     num_repeat = 1
 
-    save_dir = f"/home/atari_ws/results/runs/run_{args.mode}_{'offset' if args.offset else ''}_{int(args.size_ratio*100)}_{int(args.alpha*100)}_{int(args.beta*100)}"
+    # save_dir = f"/home/akizhanov/esfal/results/runs_3/run_{args.mode}_{'offset' if args.offset else ''}_{int(args.size_ratio*100)}_{int(args.alpha*100)}_{int(args.beta*100)}"
+    save_dir = f"/home/akizhanov/esfal/results/old/runs_new_jump_3/run_{args.mode}_{'offset' if args.offset else ''}_{int(args.size_ratio*100)}_{int(args.alpha*100)}_{int(args.beta*100)}"
     os.makedirs(save_dir, exist_ok=True)
     
     print(f"Count: {args.id}")
@@ -87,9 +89,10 @@ if __name__ == "__main__":
             state = np.random.get_state()
             np.random.seed(id)
         
-            stepping_stones.remove_random(N_to_remove=args.num_remove, keep=[start, goal])
+            stepping_stones.remove_random(N_to_remove=9, keep=[start, goal])
             # randomize stones position
-            stepping_stones.randomize_center_location(args.pos_noise, keep=[start, goal])
+            stepping_stones.randomize_center_location(0.75, keep=[start, goal])
+            stepping_stones.randomize_height(0.02, keep=[start, goal])
 
             # set the random state back to the original
             np.random.set_state(state)
@@ -129,7 +132,7 @@ if __name__ == "__main__":
                     alpha_exploration=0.0,
                     C=0.01,
                     W=5.,
-                    max_solution_search=3,
+                    max_solution_search=1,
                     print_info=True,
                     n_threads_kin=1,
                     n_threads_sim=1,
@@ -147,8 +150,8 @@ if __name__ == "__main__":
                     W=5.,
                     state_estimator_state_path=REGRESSOR_PATH,
                     classifier_state_path=CLASSIFIER_PATH,
-                    max_solution_search=3,
-                    classifier_threshold=0.6,
+                    max_solution_search=1,
+                    classifier_threshold=0.65, #0.6,
                     safety=args.alpha,
                     accuracy=args.beta,
                     print_info=True,
@@ -156,7 +159,11 @@ if __name__ == "__main__":
                 # Important to init the robot position
                 simulator.set_start_and_goal(start_indices=start, goal_indices=goal)
 
-            mcts.search(start, goal, num_iterations=10000)
+
+            if args.mode == "kin":
+                mcts.search(start, goal, num_iterations=8000)
+            else:
+                mcts.search(start, goal, num_iterations=4000)
                     
             print(mcts.statistics)
 
@@ -166,8 +173,8 @@ if __name__ == "__main__":
                 'id': id,
                 'repeat': repeat,
                 'mode': args.mode,
-                'num_remove': args.num_remove,
-                'pos_noise': args.pos_noise,
+                # 'num_remove': args.num_remove,
+                # 'pos_noise': args.pos_noise,
                 'offset': args.offset,
                 'id_remove': stepping_stones.id_to_remove,
             })

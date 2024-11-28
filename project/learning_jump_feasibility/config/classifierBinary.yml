@@ -5,13 +5,13 @@ DATA: # arguments that will be passed to get_dataloaders
   noise_std: 1.0e-4
   # noise_std: 0.0
   exclude: "pos_vj"
-  data_path: "/home/atari_ws/data/learning_jump_feasibility"
+  data_path: "/home/akizhanov/esfal/data/learning_jump_feasibility"
 
 MODEL:
   model_name: MLP
   PARAMS: # arguments that will be passed to the chosen models
-    # input_dim: 46
-    input_dim: 58
+    input_dim: 46
+    # input_dim: 58
     output_dim: 1
     n_hidden: 4
     latent_dim: 64

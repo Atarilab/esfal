@@ -20,7 +20,8 @@ class SteppingStonesSimulator(Simulator):
     # Minimun number of steps the goal is reached consecutively
     MIN_GOAL_CONSECUTIVE = 3
     # Check if robot reached goal every <CHECK_GOAL_PERIOD> steps
-    CHECK_GOAL_PERIOD = 150
+    # CHECK_GOAL_PERIOD = 750
+    CHECK_GOAL_PERIOD = 500
     
     def __init__(self,
                  stepping_stones_env: SteppingStonesEnv,
