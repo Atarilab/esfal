@@ -1,5 +1,9 @@
 # Learning feasible transitions for efficient contact planning
 
+[Webpage](https://rihat99.github.io/efficient_contact_planning/)
+
+[Paper](https://arxiv.org/abs/2407.11788v2)
+
 This repository is the code for the paper named "Learning feasible transitions for efficient contact planning". 
 
 ![example_env](images/env_example.jpg)
@@ -44,10 +48,10 @@ The environment is set up automatically with [BiConMP](https://github.com/machin
 cd /home/atari_ws/project/
 
 # Collect train data
-python3 collect_data.py --saving_path /home/atari_ws/data/learning_jump_feasibility/train --N 10000 --cores 20
+python3 collect_data.py --saving_path /home/atari_ws/data/learning_jump_feasibility/train --N 10000 --cores 20 --gait jump
 
 # Collect test data
-python3 collect_data.py --saving_path /home/atari_ws/data/learning_jump_feasibility/test --N 1000 --cores 20
+python3 collect_data.py --saving_path /home/atari_ws/data/learning_jump_feasibility/test --N 1000 --cores 20 --gait jump
 ```
 
 - [`main.py`](project/learning_jump_feasibility/main.py) run train the models on the data. Model are saved in learning_jump_feasibility/logs
@@ -69,7 +73,7 @@ python3 main.py --train supervised --cfg ./config/regressorMLP.yml
  cd /home/atari_ws/project/
 
  # run single experiment
- python3 run_experiments.py --mode kin --num_remove 9 --pose_noise 0.75 --size_ratio 0.6 --id 0
+ python3 run_experiments.py --mode kin --num_remove 9 --pose_noise 0.75 --size_ratio 0.6 --id 0 --gait jump
 
  # run multiple experiments
  ./multiple_experiments.sh
