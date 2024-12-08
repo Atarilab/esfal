@@ -2,10 +2,10 @@ import numpy as np
 import time
 from mujoco._structs import MjData
 
-from mpc_controller.cyclic_gait_gen import CyclicQuadrupedGaitGen
+from mpc_controller.trot.cyclic_gait_gen import CyclicQuadrupedGaitGen
 from mpc_controller.robot_id_controller import InverseDynamicsController
 from mpc_controller.motions.weight_abstract import BiconvexMotionParams
-from mpc_controller.bicon_mpc import BiConMPC
+from mpc_controller.trot.bicon_mpc import BiConMPC
 from mj_pin_wrapper.abstract.robot import RobotWrapperAbstract
 from mj_pin_wrapper.abstract.controller import ControllerAbstract
 
@@ -77,12 +77,12 @@ class BiconMPCOffset(BiConMPC):
             if (self.consecutive_landing > BiconMPCOffset.MIN_STEP_IN_CONTACT and
                 self.waiting_for_next_jump):
 
-                # if self.half_gait:
-                #     self.half_gait = False
-                #     self.waiting_for_next_jump = False
+                if self.half_gait:
+                    self.half_gait = False
+                    self.waiting_for_next_jump = False
                     
-                #     self.replanning += 1
-                #     return mpc_contacts
+                    self.replanning += 1
+                    return mpc_contacts
                 
                 self.waiting_for_next_jump = False
                 self.half_gait = True

@@ -157,6 +157,8 @@ class MCTSSteppingStonesKin(MCTS):
         
         # print(contact_plan)
         goal_reached = self.sim.run_contact_plan(contact_plan)
+        if not goal_reached:
+            print(contact_plan)
 
         target_contacts = self.sim.stepping_stones.positions[contact_plan]
         target_contacts = np.array(target_contacts)[:, :, :2]

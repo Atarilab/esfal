@@ -11,12 +11,14 @@ from mujoco._structs import MjData
 
 from numpy.core.multiarray import array as array
 
+from mpc_controller.jump.bicon_mpc import BiConMPC as BiConMPC_jump
+from mpc_controller.trot.bicon_mpc import BiConMPC as BiConMPC_trot
 from mpc_controller.motions.cyclic.go2_jump import jump
 from mpc_controller.motions.cyclic.go2_trot import trot
 from mj_pin_wrapper.sim_env.utils import RobotModelLoader
 from mj_pin_wrapper.abstract.robot import QuadrupedWrapperAbstract
 from mj_pin_wrapper.simulator import Simulator
-from mpc_controller.bicon_mpc import BiConMPC
+# from mpc_controller.bicon_mpc import BiConMPC
 from environment.stepping_stones import SteppingStonesEnv
 from mj_pin_wrapper.abstract.data_recorder import DataRecorderAbstract
 from utils.visuals import desired_contact_locations_callback, position_3d_callback
@@ -40,13 +42,15 @@ class RecordJumpData(DataRecorderAbstract):
     TARGET_NAME = "target"
     COLLISION_NAME = "collision"
     
-    def __init__(self, robot : QuadrupedWrapperAbstract, contact_plan, record_dir: str = "") -> None:
+    def __init__(self, robot : QuadrupedWrapperAbstract, contact_plan, record_dir: str = "", gait: str="") -> None:
         super().__init__(record_dir)
         self.robot = robot
         self.contact_plan = contact_plan
         self.consecutive_landing = 0
         self.waiting_for_next_jump = True
         self.i_jump = 0
+
+        self.gait = gait
         
         self.saving_file_path = os.path.join(record_dir, RecordJumpData.FILE_NAME)
     
@@ -161,43 +165,63 @@ class RecordJumpData(DataRecorderAbstract):
             # self.record_collision[-1] = collision_contacts
 
     def record(self, q: np.array, v: np.array, robot_data: MjData) -> None:
-        self._update_consecutive_landing()
+        if self.gait == "jump":
+            self._update_consecutive_landing()
 
-        # jump_i_ = int((robot_data.time + 0.5*trot.gait_period) // (trot.gait_period))
-        # jump_i_ = int((robot_data.time + 0.5*jump.gait_period) // (jump.gait_period))
-        # if jump_i_ != self.i_jump:
-        #     self.i_jump = jump_i_
+            if (self.consecutive_landing > RecordJumpData.MIN_STEP_IN_CONTACT and
+                self.waiting_for_next_jump):
+                
+                # State
+                current_state = np.concatenate((q, v), axis=0)
+                self.record_state.append(current_state)
+                            
+                # Contact
+                contact_locations_w = self.robot.get_pin_feet_position_world()
+                self.record_feet_contact.append(contact_locations_w)
+                
+                # Target
+                self.i_jump = int((robot_data.time + jump.gait_horizon / 2) // (jump.gait_horizon / 2))
+  
+                if self.i_jump > len(self.contact_plan) - 1:
+                    target_location_w = np.array(self.contact_plan[-1])
+                else:
+                    target_location_w = np.array(self.contact_plan[self.i_jump])
+                self.record_target_contact.append(target_location_w)
 
-        if (self.consecutive_landing > RecordJumpData.MIN_STEP_IN_CONTACT and
-            self.waiting_for_next_jump):
+                # Contacts
+                self.record_collision.append(np.zeros(5, dtype=np.int8)) # 0 When no collision
+                
+                self.waiting_for_next_jump = False
 
-        #     if self.half_gait:
-        #         self.half_gait = False
-        #         self.waiting_for_next_jump = False
-        #         return
-            
-            # State
-            current_state = np.concatenate((q, v), axis=0)
-            self.record_state.append(current_state)
-                        
-            # Contact
-            contact_locations_w = self.robot.get_pin_feet_position_world()
-            self.record_feet_contact.append(contact_locations_w)
-            
-            # Target
-            self.i_jump = int((robot_data.time + jump.gait_horizon / 2) // (jump.gait_horizon / 2))
-            # self.i_jump = int((robot_data.time + 0.5*trot.gait_period) // (trot.gait_period))
-            if self.i_jump > len(self.contact_plan) - 1:
-                target_location_w = np.array(self.contact_plan[-1])
-            else:
-                target_location_w = np.array(self.contact_plan[self.i_jump])
-            self.record_target_contact.append(target_location_w)
+        elif self.gait == "trot":
 
-            # Contacts
-            self.record_collision.append(np.zeros(5, dtype=np.int8)) # 0 When no collision
-            
-            self.waiting_for_next_jump = False
-            self.half_gait = True
+            self._update_consecutive_landing()
+
+            jump_i_ = int((robot_data.time + 0.5*trot.gait_period) // (trot.gait_period))
+
+            if jump_i_ != self.i_jump:
+                self.i_jump = jump_i_
+                
+                # State
+                current_state = np.concatenate((q, v), axis=0)
+                self.record_state.append(current_state)
+                            
+                # Contact
+                contact_locations_w = self.robot.get_pin_feet_position_world()
+                self.record_feet_contact.append(contact_locations_w)
+                
+                # Target
+                if self.i_jump > len(self.contact_plan) - 1:
+                    target_location_w = np.array(self.contact_plan[-1])
+                else:
+                    target_location_w = np.array(self.contact_plan[self.i_jump])
+                self.record_target_contact.append(target_location_w)
+
+                # Contacts
+                self.record_collision.append(np.zeros(5, dtype=np.int8)) # 0 When no collision
+                
+                self.waiting_for_next_jump = False
+
     
     def _append_and_save(self, skip_first, skip_last):
         # if len(self.record_state) - skip_first - skip_last > 0:
@@ -280,7 +304,8 @@ def record_data(robot_source: QuadrupedWrapperAbstract,
                 saving_path: str,
                 seed : int = 0,
                 queue : Queue = None,
-                lock = None):
+                lock = None,
+                gait = "jump"):
 
     robot = copy.copy(robot_source)
     robot.reset()
@@ -288,12 +313,18 @@ def record_data(robot_source: QuadrupedWrapperAbstract,
     contact_plan = create_random_walk_contact_plan(feet_pos_w, seed=seed)
 
     ### Record data
-    jump_recorder = RecordJumpData(robot, contact_plan, saving_path)
+    jump_recorder = RecordJumpData(robot, contact_plan, saving_path, gait=gait)
 
     ### Controller
-    motion_params = trot
+    if gait == "jump":
+        motion_params = jump
+        controller = BiConMPC_jump(robot, replanning_time=0.05, sim_opt_lag=False)
+    elif gait == "trot":
+        motion_params = trot
+        controller = BiConMPC_trot(robot, replanning_time=0.05, sim_opt_lag=False)
+    else:
+        raise ValueError("Gait type not supported")
 
-    controller = BiConMPC(robot, replanning_time=0.05, sim_opt_lag=False)
     controller.set_gait_params(motion_params)  # Choose between trot, jump and bound
     controller.set_contact_plan(copy.deepcopy(contact_plan))
 
@@ -334,6 +365,7 @@ if __name__ == "__main__":
     parser.add_argument('--dir_step', type=int, default=CHANGE_DIR_STEP, help='Epsilon value')
     parser.add_argument('--v', type=float, default=V, help='Velocity scale')
     parser.add_argument('--test', action="store_true", help='Simulation with visualization.')
+    parser.add_argument('--gait', type=str, default="jump", help='Gait type')
 
     args = parser.parse_args()
     
@@ -353,13 +385,13 @@ if __name__ == "__main__":
     )
     
     if args.test:
-        record_data(robot, "", seed=np.random.randint(0, 2**32 - 1))
+        record_data(robot, "", seed=np.random.randint(0, 2**32 - 1), gait=args.gait)
         
     else:
     
         def multiprocess_record_data(saving_path, seed, queue, lock) -> None:
             r = copy.copy(robot)
-            record_data(r, saving_path, seed, queue, lock)
+            record_data(r, saving_path, seed, queue, lock, gait=args.gait)
         
         manager = Manager()
         lock = manager.Lock()

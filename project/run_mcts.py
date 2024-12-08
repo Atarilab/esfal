@@ -5,11 +5,12 @@ os.environ['MUJOCO_GL'] = 'egl'
 import numpy as np
 import argparse
 
-from mpc_controller.bicon_mpc_offset import BiconMPCOffset
-from mpc_controller.bicon_mpc import BiConMPC
+from mpc_controller.jump.bicon_mpc_offset import BiconMPCOffset as BiconMPCOffset_jump
+from mpc_controller.jump.bicon_mpc import BiConMPC as BiConMPC_jump
+from mpc_controller.trot.bicon_mpc_offset import BiconMPCOffset as BiconMPCOffset_trot
+from mpc_controller.trot.bicon_mpc import BiConMPC as BiConMPC_trot
 from mpc_controller.motions.cyclic.go2_trot import trot
 from mpc_controller.motions.cyclic.go2_jump import jump
-from mpc_controller.motions.cyclic.go2_bound import bound
 
 from mj_pin_wrapper.sim_env.utils import RobotModelLoader
 from mj_pin_wrapper.abstract.robot import QuadrupedWrapperAbstract
@@ -22,14 +23,6 @@ from utils.visuals import desired_contact_locations_callback
 from tree_search.mcts_stepping_stones import MCTSSteppingStonesKin, MCTSSteppingStonesDyn
 from learning_jump_feasibility.collect_data import RecordJumpData
 
-REGRESSOR_PATH = f"tree_search/trained_models/state_estimator/0/MLP.pth"
-CLASSIFIER_PATH = f"tree_search/trained_models/classifier/0/MLP.pth"
-OFFSET_PATH = f"tree_search/trained_models/offset/1/MLP.pth"
-
-
-# REGRESSOR_PATH = "learning_jump_feasibility/logs/MLP_regressor/0/MLP.pth"
-# CLASSIFIER_PATH = "learning_jump_feasibility/logs/MLPclassifierBinary/0/MLP.pth"
-# OFFSET_PATH = "learning_jump_feasibility/logs/MLP_offset/0/MLP.pth"
 
 
 class Go2Config:
@@ -42,9 +35,17 @@ class Go2Config:
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Argument parser for simulation parameters.")
+    parser.add_argument('--gait', type=str, default="jump", help='Which MCTS to use (kin or dyn)')
     parser.add_argument('--mode', type=str, default="dyn", help='Which MCTS to use (kin or dyn)')
     parser.add_argument('--offset', type=bool, default=True, help='Use offset controller')
+    parser.add_argument('--size', type=int, default=50, help='Size of the stones')
+    parser.add_argument('--seed', type=int, default=0, help='Random seed')
     args = parser.parse_args()
+
+    
+    REGRESSOR_PATH = f"tree_search/trained_models/{args.gait}/state_estimator/0/MLP.pth"
+    CLASSIFIER_PATH = f"tree_search/trained_models/{args.gait}/classifier/0/MLP.pth"
+    OFFSET_PATH = f"tree_search/trained_models/{args.gait}/offset/0/MLP.pth"
     
     cfg = Go2Config
 
@@ -55,13 +56,15 @@ if __name__ == "__main__":
 
     start = [23, 9, 21, 7]
     goal = [27, 13, 25, 11]
+
+    size = args.size / 100.0
     
     ### Stepping stones env
     stepping_stones_height = 0.2
     stepping_stones = SteppingStonesEnv(
         grid_size=(7, 5),
         spacing=(0.18, 0.28/2),
-        size_ratio=(0.5, 0.5),
+        size_ratio=(size, size),
         height=stepping_stones_height,
         shape="box",
         start=start,
@@ -70,7 +73,7 @@ if __name__ == "__main__":
    
    # get current random state of numpy
     state = np.random.get_state()
-    np.random.seed(11)
+    np.random.seed(args.seed)
     # randomize stones position
     stepping_stones.remove_random(N_to_remove=9, keep=[start, goal])
     stepping_stones.randomize_center_location(0.75, keep=[start, goal])
@@ -90,17 +93,26 @@ if __name__ == "__main__":
         gear_ratio=cfg.gear_ratio,
         foot_size=cfg.foot_size,
         )
-    
-    ### Controller
-    controller = BiconMPCOffset(robot, OFFSET_PATH, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
-    # controller = BiConMPC(robot, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
-    controller.set_gait_params(jump)  # Choose between trot, jump and bound
+
+    if args.gait == "trot":
+        if args.offset:
+            controller = BiconMPCOffset_trot(robot, OFFSET_PATH, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
+        else:
+            controller = BiConMPC_trot(robot, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
+        controller.set_gait_params(trot)  # Choose between trot, jump and bound
+    elif args.gait == "jump":
+        if args.offset:
+            controller = BiconMPCOffset_jump(robot, OFFSET_PATH, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
+        else:
+            controller = BiConMPC_jump(robot, replanning_time=0.05, sim_opt_lag=False, height_offset=stepping_stones_height)
+        controller.set_gait_params(jump)
 
     # data recorder
     data_recorder = RecordJumpData(robot, None)
 
     ### Simulator
-    simulator = SteppingStonesSimulator(stepping_stones, robot, controller, data_recorder, update_data_recorder=True)
+    check_goal_period = 750 if args.gait == "trot" else 500
+    simulator = SteppingStonesSimulator(stepping_stones, robot, controller, data_recorder, update_data_recorder=True, check_goal_period=check_goal_period)
 
     if args.mode == "kin":
         mcts = MCTSSteppingStonesKin(

@@ -21,9 +21,13 @@ class BiconMPCOffset(BiConMPC):
         self.consecutive_landing = 0
         self.waiting_for_next_jump = True
 
+        self.half_gait = False
+
     def reset(self):
         self.consecutive_landing = 0
         self.waiting_for_next_jump = True
+
+        self.half_gait = False
 
         return super().reset()
     
@@ -56,21 +60,32 @@ class BiconMPCOffset(BiConMPC):
                     axis=0
                 )
 
-            # Take the next horizon contact locations
-            mpc_contacts = self.full_length_contact_plan[self.replanning:self.replanning + 2 * self.gait_horizon]
-            
+                self.achieved = True
+
+            # Take the next <horizon> contact locations
+            mpc_contacts = self.full_length_contact_plan[self.replanning: self.replanning + self.gait_horizon]
             # Update the desired velocity
-            i = (self.gait_horizon - 1) *  2
-            avg_position_next_cnt = np.mean(mpc_contacts[i], axis=0)
-            self.v_des = np.round((avg_position_next_cnt - q[:3]) / self.gait_period, 2)
-            self.v_des *= 1.25
-            self.v_des[-1] = 0.
+            i_next_jump = self.replanning + 2 * (self.gait_horizon - 2)
+            center_position_next_cnt = np.mean(self.full_length_contact_plan[i_next_jump], axis=0)
+            self.v_des = np.round((center_position_next_cnt - q[:3]) / self.gait_period, 2)
+            # Scale velocity
+            # self.v_des *= np.array([1.3, 2., 0.])
+            self.v_des *= np.array([1.3, 2.0, 0.])
+            # print("Desired velocity: ", self.v_des)
             
             self._update_consecutive_landing()
             if (self.consecutive_landing > BiconMPCOffset.MIN_STEP_IN_CONTACT and
                 self.waiting_for_next_jump):
+
+                if self.half_gait:
+                    self.half_gait = False
+                    self.waiting_for_next_jump = False
+                    
+                    self.replanning += 1
+                    return mpc_contacts
                 
                 self.waiting_for_next_jump = False
+                self.half_gait = True
                 
                 # Run the offset network and update the contact locations
                 i_target = self.gait_horizon - self.replanning % self.gait_horizon 

@@ -3,7 +3,7 @@ from typing import Any, Callable, Tuple
 import numpy as np
 from environment.stepping_stones import SteppingStonesEnv
 from mj_pin_wrapper.simulator import Simulator
-from mpc_controller.bicon_mpc import BiConMPC
+# from mpc_controller.bicon_mpc import BiConMPC
 from mj_pin_wrapper.abstract.data_recorder import DataRecorderAbstract
 from mj_pin_wrapper.abstract.robot import QuadrupedWrapperAbstract
 
@@ -20,13 +20,13 @@ class SteppingStonesSimulator(Simulator):
     # Minimun number of steps the goal is reached consecutively
     MIN_GOAL_CONSECUTIVE = 3
     # Check if robot reached goal every <CHECK_GOAL_PERIOD> steps
-    # CHECK_GOAL_PERIOD = 750
-    CHECK_GOAL_PERIOD = 500
+    CHECK_GOAL_PERIOD = 750
+    # CHECK_GOAL_PERIOD = 500
     
     def __init__(self,
                  stepping_stones_env: SteppingStonesEnv,
                  robot: QuadrupedWrapperAbstract,
-                 controller: BiConMPC,
+                 controller,
                  data_recorder: DataRecorderAbstract = None,
                  **kwargs) -> None:
         super().__init__(robot, controller, data_recorder)
@@ -44,6 +44,7 @@ class SteppingStonesSimulator(Simulator):
             "min_goal_consecutive" : SteppingStonesSimulator.MIN_GOAL_CONSECUTIVE,            
             "height_offset" : SteppingStonesSimulator.HEIGHT_OFFSET_START,    
             "update_data_recorder" : False,      
+            "check_goal_period" : SteppingStonesSimulator.CHECK_GOAL_PERIOD,
         }
         optionals.update(kwargs)
         for k, v in optionals.items(): setattr(self, k, v)
@@ -181,7 +182,7 @@ class SteppingStonesSimulator(Simulator):
     def _simulation_step(self) -> None:
         super()._simulation_step()
         
-        if self.sim_step % SteppingStonesSimulator.CHECK_GOAL_PERIOD == 0:
+        if self.sim_step % self.check_goal_period == 0:
             self._on_goal()
             if self.consec_on_goal >= self.min_goal_consecutive:
                 self.stop_sim = True
